@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,11 @@ from .llm_analyzer import analyze_image, mock_analyze
 from .vectorize import process_plan
 from .plan_contract import Plan
 from .pdf_utils import pdf_to_images, is_pdf
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
 
 logger = logging.getLogger(__name__)
 
