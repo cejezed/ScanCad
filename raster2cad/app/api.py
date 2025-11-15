@@ -260,8 +260,11 @@ async def debug_analyze(
     dpi: int = Form(default=300),
 ) -> JSONResponse:
     """
-    Debug endpoint: Analyze and return detailed feature info.
+    Debug endpoint: Analyze and return detailed feature info with provider used.
     """
+    import os
+    import logging
+
     try:
         file_bytes = await file.read()
         if not file_bytes:
@@ -273,14 +276,21 @@ async def debug_analyze(
                 raise HTTPException(status_code=400, detail="Failed to convert PDF")
             file_bytes, _ = images[0]
 
+        # Set logging to DEBUG to see what provider is used
+        logging.getLogger("raster2cad.app.llm_analyzer").setLevel(logging.DEBUG)
+
         plan_dict = analyze_image(file_bytes, dpi=dpi)
 
-        # Return with feature count summary
+        # Return with feature count summary and provider info
         features = plan_dict.get("features", [])
         summary = {
             "total_features": len(features),
             "by_label": {},
             "features": features,
+            "debug_info": {
+                "anthropic_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
+                "openai_key_set": bool(os.getenv("OPENAI_API_KEY")),
+            },
         }
 
         for feature in features:
@@ -290,7 +300,7 @@ async def debug_analyze(
         return JSONResponse(content=summary)
 
     except Exception as e:
-        logger.error(f"Debug analysis failed: {e}")
+        logger.error(f"Debug analysis failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Debug analysis failed: {str(e)}"
         )

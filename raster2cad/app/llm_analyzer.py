@@ -218,15 +218,17 @@ def _analyze_with_openai(
     }
 
     try:
+        logger.debug(f"Sending request to OpenAI with model: {model}")
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
             json=payload,
             timeout=60,
         )
+        logger.debug(f"OpenAI response status: {response.status_code}")
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        logger.error(f"OpenAI API call failed: {e}")
+        logger.error(f"OpenAI API call failed: {e}", exc_info=True)
         logger.warning("Falling back to mock analyzer")
         return mock_analyze(image_bytes, dpi)
 
@@ -237,8 +239,15 @@ def _analyze_with_openai(
         return mock_analyze(image_bytes, dpi)
 
     # Extract JSON from response
-    response_text = result["choices"][0]["message"]["content"]
-    return _parse_json_response(response_text, image_bytes, dpi)
+    try:
+        response_text = result["choices"][0]["message"]["content"]
+        logger.debug(f"OpenAI response length: {len(response_text)} chars")
+        return _parse_json_response(response_text, image_bytes, dpi)
+    except (KeyError, IndexError) as e:
+        logger.error(f"Failed to extract response from OpenAI: {e}")
+        logger.error(f"Response structure: {result}")
+        logger.warning("Falling back to mock analyzer")
+        return mock_analyze(image_bytes, dpi)
 
 
 def _parse_json_response(
