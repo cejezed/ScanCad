@@ -303,41 +303,48 @@ def mock_analyze(image_bytes: bytes, dpi: int = 300) -> Dict[str, Any]:
         pass
 
     # Generate realistic mock features for a floor plan
+    # Scale: assume 300 DPI image where 1 inch = 25.4 mm
+    # For a 1024px × 768px image at 300 DPI = 86.4mm × 64.8mm
+    # Scale up features to be realistic room dimensions
+
+    wall_thickness = 20  # pixels (represents ~5mm wall)
+    margin = 100  # pixels margin from edge
+
     features = [
-        # Outer walls
+        # Outer walls (perimeter)
         {
             "id": "wall_001",
             "label": "wall_structure",
-            "box": [50, 50, 70, img_height - 50],
+            "box": [margin, margin, margin + wall_thickness, img_height - margin],
             "conf": 0.98,
             "metadata": {},
         },
         {
             "id": "wall_002",
             "label": "wall_structure",
-            "box": [50, 50, img_width - 50, 70],
+            "box": [margin, margin, img_width - margin, margin + wall_thickness],
             "conf": 0.98,
             "metadata": {},
         },
         {
             "id": "wall_003",
             "label": "wall_structure",
-            "box": [img_width - 70, 50, img_width - 50, img_height - 50],
+            "box": [img_width - margin - wall_thickness, margin, img_width - margin, img_height - margin],
             "conf": 0.98,
             "metadata": {},
         },
         {
             "id": "wall_004",
             "label": "wall_structure",
-            "box": [50, img_height - 70, img_width - 50, img_height - 50],
+            "box": [margin, img_height - margin - wall_thickness, img_width - margin, img_height - margin],
             "conf": 0.98,
             "metadata": {},
         },
-        # Interior wall
+        # Interior wall (dividing rooms)
         {
             "id": "wall_005",
             "label": "wall_structure",
-            "box": [img_width // 2 - 10, 70, img_width // 2 + 10, img_height - 70],
+            "box": [img_width // 2 - wall_thickness // 2, margin + wall_thickness, img_width // 2 + wall_thickness // 2, img_height - margin - wall_thickness],
             "conf": 0.95,
             "metadata": {},
         },
@@ -345,7 +352,7 @@ def mock_analyze(image_bytes: bytes, dpi: int = 300) -> Dict[str, Any]:
         {
             "id": "symbol_001",
             "label": "symbol",
-            "box": [img_width // 2 - 30, 65, img_width // 2 + 30, 75],
+            "box": [img_width // 2 - 40, margin + wall_thickness - 5, img_width // 2 + 40, margin + wall_thickness + 30],
             "conf": 0.90,
             "metadata": {"symbol_type": "door", "swing_direction": "right"},
         },
@@ -353,14 +360,14 @@ def mock_analyze(image_bytes: bytes, dpi: int = 300) -> Dict[str, Any]:
         {
             "id": "symbol_002",
             "label": "symbol",
-            "box": [100, 45, 150, 55],
+            "box": [margin + 100, margin - 30, margin + 200, margin + 10],
             "conf": 0.88,
             "metadata": {"symbol_type": "window"},
         },
         {
             "id": "symbol_003",
             "label": "symbol",
-            "box": [img_width - 150, 45, img_width - 100, 55],
+            "box": [img_width - margin - 200, margin - 30, img_width - margin - 100, margin + 10],
             "conf": 0.88,
             "metadata": {"symbol_type": "window"},
         },
@@ -368,21 +375,21 @@ def mock_analyze(image_bytes: bytes, dpi: int = 300) -> Dict[str, Any]:
         {
             "id": "text_001",
             "label": "text",
-            "box": [100, 200, 200, 240],
+            "box": [margin + 150, margin + 150, margin + 300, margin + 250],
             "conf": 0.92,
             "metadata": {"content": "LIVING ROOM", "rotation_deg": 0},
         },
         {
             "id": "text_002",
             "label": "text",
-            "box": [img_width - 200, 200, img_width - 100, 240],
+            "box": [img_width - margin - 300, margin + 150, img_width - margin - 150, margin + 250],
             "conf": 0.92,
             "metadata": {"content": "BEDROOM", "rotation_deg": 0},
         },
         {
             "id": "text_003",
             "label": "text",
-            "box": [img_width // 2 - 100, img_height - 150, img_width // 2 + 100, img_height - 100],
+            "box": [img_width // 2 - 150, img_height - margin - 200, img_width // 2 + 150, img_height - margin - 100],
             "conf": 0.90,
             "metadata": {"content": "KITCHEN", "rotation_deg": 0},
         },
@@ -390,14 +397,14 @@ def mock_analyze(image_bytes: bytes, dpi: int = 300) -> Dict[str, Any]:
         {
             "id": "dim_001",
             "label": "dimension_line",
-            "box": [40, 80, 40, img_height - 80],
+            "box": [margin - 50, margin + wall_thickness, margin - 30, img_height - margin - wall_thickness],
             "conf": 0.85,
             "metadata": {"dimension": "10.5m"},
         },
         {
             "id": "dim_002",
             "label": "dimension_line",
-            "box": [100, img_height - 75, img_width - 100, img_height - 75],
+            "box": [margin + wall_thickness, img_height - margin - 50, img_width - margin - wall_thickness, img_height - margin - 30],
             "conf": 0.85,
             "metadata": {"dimension": "15.0m"},
         },
@@ -405,7 +412,7 @@ def mock_analyze(image_bytes: bytes, dpi: int = 300) -> Dict[str, Any]:
         {
             "id": "north_001",
             "label": "north_arrow",
-            "box": [img_width - 120, 20, img_width - 20, 100],
+            "box": [img_width - margin - 80, margin, img_width - margin, margin + 80],
             "conf": 0.95,
             "metadata": {"orientation_deg": 0},
         },
