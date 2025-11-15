@@ -87,7 +87,7 @@ def analyze_image(
     # Set default model based on provider
     # Using best available models: Claude 3.5 Sonnet + OpenAI GPT-5
     if not model:
-        model = "gpt-5" if provider == "openai" else "claude-3-5-sonnet-20241022"
+        model = "gpt-5-2025-08-07" if provider == "openai" else "claude-3-5-sonnet-20241022"
 
     logger.info(f"Using {provider} ({model})")
 
