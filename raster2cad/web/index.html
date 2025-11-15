@@ -824,16 +824,21 @@
                 const response = await fetch(`${API_URL}/healthz`, {
                     method: 'GET',
                 });
+                const statusItem = apiStatusEl.closest('.status-item');
+                const statusIcon = statusItem.querySelector('.status-icon');
+
                 if (response.ok) {
                     apiStatusEl.textContent = '🟢 Online';
-                    apiStatusEl.parentElement.querySelector('.status-icon').className = 'status-icon ok';
+                    statusIcon.className = 'status-icon ok';
                 } else {
                     apiStatusEl.textContent = '🔴 Error';
-                    apiStatusEl.parentElement.querySelector('.status-icon').className = 'status-icon error';
+                    statusIcon.className = 'status-icon error';
                 }
             } catch (error) {
                 apiStatusEl.textContent = '🔴 Offline';
-                apiStatusEl.parentElement.querySelector('.status-icon').className = 'status-icon error';
+                const statusItem = apiStatusEl.closest('.status-item');
+                const statusIcon = statusItem.querySelector('.status-icon');
+                statusIcon.className = 'status-icon error';
             }
         }
 
