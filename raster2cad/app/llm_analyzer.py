@@ -177,7 +177,7 @@ def _analyze_with_openai(
     api_key: str,
     model: str,
 ) -> Dict[str, Any]:
-    """Analyze using OpenAI GPT-4 Vision API."""
+    """Analyze using OpenAI API (GPT-5 or fallback)."""
     base64_image = get_image_base64(image_bytes)
 
     # Detect image format
@@ -218,46 +218,75 @@ def _analyze_with_openai(
         ],
     }
 
-    try:
-        logger.debug(f"Sending request to OpenAI with model: {model}")
-        logger.debug(f"API Key (first 20 chars): {api_key[:20]}...")
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60,
-        )
-        logger.debug(f"OpenAI response status: {response.status_code}")
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"OpenAI API call failed: {e}")
+    # Try with the requested model, fallback to gpt-4-turbo if it fails
+    models_to_try = [model]
+    if model.startswith("gpt-5"):
+        # If GPT-5 fails (user might not have access), try GPT-4 Turbo
+        models_to_try.append("gpt-4-turbo")
+
+    for attempt_model in models_to_try:
+        payload["model"] = attempt_model
         try:
-            error_details = response.json() if response else {}
-            logger.error(f"OpenAI error details: {error_details}")
-        except:
-            logger.error(f"OpenAI response text: {response.text if response else 'No response'}")
-        logger.warning("Falling back to mock analyzer")
-        return mock_analyze(image_bytes, dpi)
+            logger.debug(f"Sending request to OpenAI with model: {attempt_model}")
+            logger.debug(f"API Key (first 20 chars): {api_key[:20]}...")
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            logger.debug(f"OpenAI response status: {response.status_code}")
+            response.raise_for_status()
 
-    result = response.json()
-    if "error" in result:
-        logger.error(f"OpenAI API error: {result['error']}")
-        logger.warning("Falling back to mock analyzer")
-        return mock_analyze(image_bytes, dpi)
+            # Success! Process the response
+            result = response.json()
+            if "error" in result:
+                logger.error(f"OpenAI API error: {result['error']}")
+                if attempt_model == models_to_try[-1]:
+                    # Last attempt failed
+                    logger.warning("Falling back to mock analyzer")
+                    return mock_analyze(image_bytes, dpi)
+                else:
+                    # Try next model
+                    continue
 
-    # Extract JSON from response
-    try:
-        response_text = result["choices"][0]["message"]["content"]
-        logger.debug(f"OpenAI response length: {len(response_text)} chars")
-        logger.debug(f"OpenAI response preview (first 500 chars): {response_text[:500]}")
-        parsed = _parse_json_response(response_text, image_bytes, dpi)
-        logger.info(f"OpenAI analysis complete: {len(parsed.get('features', []))} features detected")
-        return parsed
-    except (KeyError, IndexError) as e:
-        logger.error(f"Failed to extract response from OpenAI: {e}")
-        logger.error(f"Response structure: {result}")
-        logger.warning("Falling back to mock analyzer")
-        return mock_analyze(image_bytes, dpi)
+            # Extract JSON from response
+            try:
+                response_text = result["choices"][0]["message"]["content"]
+                logger.debug(f"OpenAI response length: {len(response_text)} chars")
+                logger.debug(f"OpenAI response preview (first 500 chars): {response_text[:500]}")
+                parsed = _parse_json_response(response_text, image_bytes, dpi)
+                logger.info(f"OpenAI analysis complete ({attempt_model}): {len(parsed.get('features', []))} features detected")
+                return parsed
+            except (KeyError, IndexError) as e:
+                logger.error(f"Failed to extract response from OpenAI: {e}")
+                logger.error(f"Response structure: {result}")
+                if attempt_model == models_to_try[-1]:
+                    logger.warning("Falling back to mock analyzer")
+                    return mock_analyze(image_bytes, dpi)
+                else:
+                    continue
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OpenAI API call failed with {attempt_model}: {e}")
+            try:
+                error_details = response.json() if response else {}
+                logger.error(f"OpenAI error details: {error_details}")
+            except:
+                logger.error(f"OpenAI response text: {response.text if response else 'No response'}")
+
+            if attempt_model == models_to_try[-1]:
+                # Last attempt failed, give up
+                logger.warning("All OpenAI models failed, falling back to mock analyzer")
+                return mock_analyze(image_bytes, dpi)
+            else:
+                # Try next model
+                logger.info(f"Trying fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
+                continue
+
+    # Shouldn't reach here, but just in case
+    logger.warning("No models available, falling back to mock analyzer")
+    return mock_analyze(image_bytes, dpi)
 
 
 def _parse_json_response(
