@@ -12,6 +12,8 @@ from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .llm_analyzer import analyze_image, mock_analyze
 from .vectorize import process_plan
@@ -26,6 +28,29 @@ app = FastAPI(
     description="LLM-first architectural drawing vectorization engine",
     version="0.1.0",
 )
+
+# Enable CORS for web interface
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files (web UI)
+web_dir = Path(__file__).parent.parent / "web"
+if web_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+
+
+@app.get("/")
+async def root():
+    """Serve web UI."""
+    web_file = Path(__file__).parent.parent / "web" / "index.html"
+    if web_file.exists():
+        return FileResponse(web_file, media_type="text/html")
+    return {"message": "Web UI not available"}
 
 
 @app.get("/healthz")

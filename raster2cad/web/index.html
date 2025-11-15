@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raster2CAD - Architectural Drawing Vectorizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .logo {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            margin-bottom: 30px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .status-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .status-icon.ok {
+            background-color: #4caf50;
+        }
+
+        .status-icon.pending {
+            background-color: #ff9800;
+        }
+
+        .status-icon.error {
+            background-color: #f44336;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .upload-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .drop-zone {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: #f8f9ff;
+        }
+
+        .drop-zone:hover {
+            border-color: #764ba2;
+            background-color: #f0f1ff;
+            transform: translateY(-2px);
+        }
+
+        .drop-zone.drag-over {
+            border-color: #764ba2;
+            background-color: #e8e9ff;
+            transform: scale(1.02);
+        }
+
+        .drop-zone-text {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .drop-zone-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .preview-section {
+            margin-bottom: 30px;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .preview-image.active {
+            display: block;
+        }
+
+        .file-info {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .file-info.active {
+            display: block;
+        }
+
+        .file-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .file-info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .value {
+            color: #333;
+            font-weight: 600;
+        }
+
+        .options-section {
+            margin-bottom: 30px;
+        }
+
+        .option-group {
+            margin-bottom: 20px;
+        }
+
+        .option-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .input-group input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            flex: 1;
+            max-width: 150px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e0e0e0;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-section {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .progress-section.active {
+            display: block;
+        }
+
+        .progress-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { opacity: 0.8; }
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+            font-size: 14px;
+        }
+
+        .message.active {
+            display: block;
+        }
+
+        .message.success {
+            background-color: #c8e6c9;
+            color: #2e7d32;
+            border-left: 4px solid #4caf50;
+        }
+
+        .message.error {
+            background-color: #ffcdd2;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+        }
+
+        .message.info {
+            background-color: #bbdefb;
+            color: #1565c0;
+            border-left: 4px solid #2196f3;
+        }
+
+        .plan-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            display: none;
+        }
+
+        .plan-section.active {
+            display: block;
+        }
+
+        .plan-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .plan-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .plan-stat {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+
+        .plan-stat-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .plan-stat-value {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .download-button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .download-button-group button {
+            flex: 1;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .footer-links {
+            margin-top: 10px;
+        }
+
+        .footer-links a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .input-group input {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">🏗️</div>
+            <h1>Raster2CAD</h1>
+            <p class="subtitle">Convert architectural drawings to DXF</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-icon ok">✓</div>
+                <span>API Server: <strong id="api-status">Connecting...</strong></span>
+            </div>
+        </div>
+
+        <div id="error-message" class="message error"></div>
+        <div id="success-message" class="message success"></div>
+        <div id="info-message" class="message info"></div>
+
+        <div class="upload-section">
+            <label class="upload-label">📤 Upload Architectural Drawing</label>
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📁</div>
+                <div class="drop-zone-text">
+                    <strong>Drag and drop your file here</strong><br>
+                    or click to select
+                </div>
+                <small style="color: #999;">JPG, PNG, or PDF • Max 50MB</small>
+            </div>
+            <input type="file" id="fileInput" class="file-input" accept=".jpg,.jpeg,.png,.pdf">
+        </div>
+
+        <div class="preview-section">
+            <img id="preview" class="preview-image" alt="Preview">
+            <div id="fileInfo" class="file-info">
+                <div class="file-info-item">
+                    <span class="label">Filename:</span>
+                    <span class="value" id="fileName">-</span>
+                </div>
+                <div class="file-info-item">
+                    <span class="label">File Size:</span>
+                    <span class="value" id="fileSize">-</span>
+                </div>
+                <div class="file-info-item">
+                    <span class="label">Dimensions:</span>
+                    <span class="value" id="fileDimensions">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="options-section">
+            <div class="option-group">
+                <label class="option-label">DPI Resolution</label>
+                <div class="input-group">
+                    <input type="number" id="dpi" value="300" min="72" max="600" step="10">
+                    <span style="color: #666; font-size: 14px;">dots per inch</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="planSection" class="plan-section">
+            <div class="plan-title">📊 Analysis Results</div>
+            <div class="plan-stats">
+                <div class="plan-stat">
+                    <div class="plan-stat-label">Total Features</div>
+                    <div class="plan-stat-value" id="featureCount">0</div>
+                </div>
+                <div class="plan-stat">
+                    <div class="plan-stat-label">Walls</div>
+                    <div class="plan-stat-value" id="wallCount">0</div>
+                </div>
+                <div class="plan-stat">
+                    <div class="plan-stat-label">Texts</div>
+                    <div class="plan-stat-value" id="textCount">0</div>
+                </div>
+                <div class="plan-stat">
+                    <div class="plan-stat-label">Symbols</div>
+                    <div class="plan-stat-value" id="symbolCount">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-section" id="progressSection">
+            <div class="progress-label" id="progressLabel">Processing...</div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-primary" id="analyzeBtn" disabled>
+                🔍 Analyze Drawing
+            </button>
+            <button class="btn-primary" id="vectorizeBtn" disabled>
+                ⚡ Generate DXF
+            </button>
+        </div>
+
+        <div class="download-button-group" id="downloadGroup" style="display: none;">
+            <button class="btn-secondary" id="downloadPlanBtn">
+                💾 Download Plan (JSON)
+            </button>
+            <button class="btn-secondary" id="downloadDxfBtn">
+                📥 Download DXF
+            </button>
+            <button class="btn-secondary" id="resetBtn">
+                🔄 Start Over
+            </button>
+        </div>
+
+        <footer>
+            <p>Raster2CAD • LLM-first Vectorization Engine</p>
+            <div class="footer-links">
+                <a href="https://github.com" target="_blank">GitHub</a>
+                <a href="#" onclick="showApiStatus()">API Status</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let currentFile = null;
+        let currentPlan = null;
+        let currentDxfBlob = null;
+
+        // DOM Elements
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const fileInfo = document.getElementById('fileInfo');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const vectorizeBtn = document.getElementById('vectorizeBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressLabel = document.getElementById('progressLabel');
+        const planSection = document.getElementById('planSection');
+        const downloadGroup = document.getElementById('downloadGroup');
+        const dpiInput = document.getElementById('dpi');
+        const apiStatusEl = document.getElementById('api-status');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            checkApiStatus();
+            setInterval(checkApiStatus, 30000); // Check every 30 seconds
+        });
+
+        function setupEventListeners() {
+            // Drop zone
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-over');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                handleFiles(e.dataTransfer.files);
+            });
+
+            // File input
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+
+            // Buttons
+            analyzeBtn.addEventListener('click', analyzeImage);
+            vectorizeBtn.addEventListener('click', vectorizeImage);
+            document.getElementById('downloadPlanBtn').addEventListener('click', downloadPlan);
+            document.getElementById('downloadDxfBtn').addEventListener('click', downloadDxf);
+            document.getElementById('resetBtn').addEventListener('click', resetForm);
+        }
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+
+            currentFile = files[0];
+            const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+
+            if (!validTypes.includes(currentFile.type)) {
+                showError('Invalid file type. Please upload JPG, PNG, or PDF.');
+                return;
+            }
+
+            if (currentFile.size > 50 * 1024 * 1024) {
+                showError('File is too large. Maximum size is 50MB.');
+                return;
+            }
+
+            displayFileInfo();
+            analyzeBtn.disabled = false;
+            clearMessages();
+        }
+
+        function displayFileInfo() {
+            document.getElementById('fileName').textContent = currentFile.name;
+            document.getElementById('fileSize').textContent = formatFileSize(currentFile.size);
+            fileInfo.classList.add('active');
+
+            // Show preview for images
+            if (currentFile.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    preview.src = e.target.result;
+                    preview.classList.add('active');
+
+                    // Get dimensions
+                    const img = new Image();
+                    img.onload = () => {
+                        document.getElementById('fileDimensions').textContent =
+                            `${img.width} × ${img.height} px`;
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(currentFile);
+            } else {
+                preview.classList.remove('active');
+                document.getElementById('fileDimensions').textContent = 'N/A (PDF)';
+            }
+        }
+
+        async function analyzeImage() {
+            if (!currentFile) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            analyzeBtn.disabled = true;
+            vectorizeBtn.disabled = true;
+            showProgress('Analyzing drawing...');
+            clearMessages();
+
+            try {
+                const formData = new FormData();
+                formData.append('file', currentFile);
+                formData.append('dpi', dpiInput.value);
+
+                const response = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                }
+
+                currentPlan = await response.json();
+                displayPlanStats();
+                vectorizeBtn.disabled = false;
+                hideProgress();
+                showSuccess('Drawing analyzed successfully!');
+            } catch (error) {
+                showError(`Analysis failed: ${error.message}`);
+                analyzeBtn.disabled = false;
+            }
+        }
+
+        async function vectorizeImage() {
+            if (!currentFile) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            analyzeBtn.disabled = true;
+            vectorizeBtn.disabled = true;
+            showProgress('Generating DXF...');
+            clearMessages();
+
+            try {
+                const formData = new FormData();
+                formData.append('file', currentFile);
+                formData.append('dpi', dpiInput.value);
+                if (currentPlan) {
+                    formData.append('plan', new Blob([JSON.stringify(currentPlan)],
+                        { type: 'application/json' }), 'plan.json');
+                }
+
+                const response = await fetch(`${API_URL}/vectorize`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                }
+
+                currentDxfBlob = await response.blob();
+                hideProgress();
+                showSuccess('DXF generated successfully!');
+                downloadGroup.style.display = 'flex';
+            } catch (error) {
+                showError(`Vectorization failed: ${error.message}`);
+                analyzeBtn.disabled = false;
+                vectorizeBtn.disabled = false;
+            }
+        }
+
+        function displayPlanStats() {
+            if (!currentPlan) return;
+
+            planSection.classList.add('active');
+            const features = currentPlan.features || [];
+
+            document.getElementById('featureCount').textContent = features.length;
+            document.getElementById('wallCount').textContent =
+                features.filter(f => f.label === 'wall_structure').length;
+            document.getElementById('textCount').textContent =
+                features.filter(f => f.label === 'text').length;
+            document.getElementById('symbolCount').textContent =
+                features.filter(f => f.label === 'symbol').length;
+        }
+
+        function downloadPlan() {
+            if (!currentPlan) return;
+
+            const dataStr = JSON.stringify(currentPlan, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `plan-${Date.now()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadDxf() {
+            if (!currentDxfBlob) return;
+
+            const url = URL.createObjectURL(currentDxfBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `drawing-${Date.now()}.dxf`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function resetForm() {
+            currentFile = null;
+            currentPlan = null;
+            currentDxfBlob = null;
+
+            fileInput.value = '';
+            preview.classList.remove('active');
+            fileInfo.classList.remove('active');
+            planSection.classList.remove('active');
+            downloadGroup.style.display = 'none';
+
+            analyzeBtn.disabled = true;
+            vectorizeBtn.disabled = true;
+
+            clearMessages();
+        }
+
+        function showProgress(text) {
+            progressLabel.textContent = text;
+            progressSection.classList.add('active');
+        }
+
+        function hideProgress() {
+            progressSection.classList.remove('active');
+        }
+
+        function showError(message) {
+            const el = document.getElementById('error-message');
+            el.textContent = '❌ ' + message;
+            el.classList.add('active');
+        }
+
+        function showSuccess(message) {
+            const el = document.getElementById('success-message');
+            el.textContent = '✓ ' + message;
+            el.classList.add('active');
+        }
+
+        function showInfo(message) {
+            const el = document.getElementById('info-message');
+            el.textContent = 'ℹ ' + message;
+            el.classList.add('active');
+        }
+
+        function clearMessages() {
+            document.getElementById('error-message').classList.remove('active');
+            document.getElementById('success-message').classList.remove('active');
+            document.getElementById('info-message').classList.remove('active');
+        }
+
+        async function checkApiStatus() {
+            try {
+                const response = await fetch(`${API_URL}/healthz`, {
+                    method: 'GET',
+                });
+                if (response.ok) {
+                    apiStatusEl.textContent = '🟢 Online';
+                    apiStatusEl.parentElement.querySelector('.status-icon').className = 'status-icon ok';
+                } else {
+                    apiStatusEl.textContent = '🔴 Error';
+                    apiStatusEl.parentElement.querySelector('.status-icon').className = 'status-icon error';
+                }
+            } catch (error) {
+                apiStatusEl.textContent = '🔴 Offline';
+                apiStatusEl.parentElement.querySelector('.status-icon').className = 'status-icon error';
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function showApiStatus() {
+            checkApiStatus();
+            showInfo('API status checked. See status indicator at top.');
+        }
+    </script>
+</body>
+</html>
