@@ -248,7 +248,10 @@ def _analyze_with_openai(
     try:
         response_text = result["choices"][0]["message"]["content"]
         logger.debug(f"OpenAI response length: {len(response_text)} chars")
-        return _parse_json_response(response_text, image_bytes, dpi)
+        logger.debug(f"OpenAI response preview (first 500 chars): {response_text[:500]}")
+        parsed = _parse_json_response(response_text, image_bytes, dpi)
+        logger.info(f"OpenAI analysis complete: {len(parsed.get('features', []))} features detected")
+        return parsed
     except (KeyError, IndexError) as e:
         logger.error(f"Failed to extract response from OpenAI: {e}")
         logger.error(f"Response structure: {result}")
