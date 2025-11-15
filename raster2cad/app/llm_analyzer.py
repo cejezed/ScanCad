@@ -177,7 +177,7 @@ def _analyze_with_openai(
     api_key: str,
     model: str,
 ) -> Dict[str, Any]:
-    """Analyze using OpenAI Vision models via Responses API."""
+    """Analyze using OpenAI Vision models via Responses API with safe error handling."""
     base64_image = get_image_base64(image_bytes)
 
     # Detect image format
@@ -222,6 +222,7 @@ def _analyze_with_openai(
 
     for attempt_model in models_to_try:
         payload = make_payload(attempt_model)
+        response = None  # Initialize response to prevent UnboundLocalError
 
         try:
             logger.debug(f"Sending request to OpenAI /v1/responses with model: {attempt_model}")
@@ -230,7 +231,7 @@ def _analyze_with_openai(
                 "https://api.openai.com/v1/responses",
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=120,  # Increased from 60 to handle slow responses
             )
             logger.debug(f"OpenAI response status: {response.status_code}")
             logger.debug(f"OpenAI raw response (first 600 chars): {response.text[:600]}")
@@ -241,9 +242,19 @@ def _analyze_with_openai(
             # Responses API: text is in data["output"][0]["content"][0]["text"]
             try:
                 response_text = data["output"][0]["content"][0]["text"]
-            except (KeyError, IndexError, TypeError):
+            except (KeyError, IndexError, TypeError) as e:
+                logger.warning(f"Unexpected response structure: {e}. Trying alternate parsing...")
                 # Fallback for older/alternate response formats
                 response_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            if not response_text:
+                logger.warning(f"Empty response from OpenAI {attempt_model}")
+                if attempt_model == models_to_try[-1]:
+                    logger.warning("All OpenAI models failed, falling back to mock analyzer")
+                    return mock_analyze(image_bytes, dpi)
+                else:
+                    logger.info(f"Trying fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
+                    continue
 
             logger.debug(f"OpenAI parsed text length: {len(response_text)}")
             logger.debug(f"OpenAI response preview (first 500 chars): {response_text[:500]}")
@@ -254,17 +265,41 @@ def _analyze_with_openai(
             )
             return parsed
 
-        except Exception as e:
-            logger.error(f"OpenAI vision request failed for model {attempt_model}: {e}")
-            if response and hasattr(response, 'text'):
-                logger.debug(f"OpenAI response text: {response.text[:400]}")
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"OpenAI request timeout for {attempt_model}: {e}")
+            if attempt_model == models_to_try[-1]:
+                logger.warning("All OpenAI models timed out, falling back to mock analyzer")
+                return mock_analyze(image_bytes, dpi)
+            else:
+                logger.info(f"Trying fallback model after timeout: {models_to_try[models_to_try.index(attempt_model) + 1]}")
+                continue
 
-            # Last attempt? Fall back to mock
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OpenAI API request failed for {attempt_model}: {e}")
+            if response is not None:
+                try:
+                    error_details = response.json()
+                    logger.error(f"OpenAI error details: {error_details}")
+                except Exception:
+                    logger.error(f"OpenAI response text: {response.text[:400] if response.text else 'No response text'}")
+            else:
+                logger.error("No HTTP response object received (network error)")
+
             if attempt_model == models_to_try[-1]:
                 logger.warning("All OpenAI models failed, falling back to mock analyzer")
                 return mock_analyze(image_bytes, dpi)
             else:
                 logger.info(f"Trying fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
+                continue
+
+        except Exception as e:
+            logger.error(f"Unexpected error analyzing with {attempt_model}: {e}")
+            if attempt_model == models_to_try[-1]:
+                logger.warning("All OpenAI models failed, falling back to mock analyzer")
+                return mock_analyze(image_bytes, dpi)
+            else:
+                logger.info(f"Trying fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
+                continue
 
     # Safety net (shouldn't reach here)
     logger.warning("No models available, falling back to mock analyzer")
