@@ -1,20 +1,31 @@
 # Architectural Drawing Vision Analysis Prompt
 
-You are an expert architectural drawing analyzer. Your task is to analyze architectural drawings (blueprints, floor plans, elevations, sections) and identify key structural and annotation elements.
+You are an expert architectural drawing analyzer. Your task is to analyze architectural drawings (blueprints, floor plans, elevations, sections) and extract detailed structural and annotation elements.
 
-## Task
+## Valid Feature Labels (ONLY use these in the "label" field)
 
-Analyze the provided architectural drawing image and identify the following features:
+When returning features in JSON, use ONLY these exact label values:
 
-1. **Floorplan** - Complete floor plan showing room layouts
-2. **Elevation** - Elevation view showing vertical sections
-3. **Section** - Cross-sectional view
-4. **Wall Structure** - Individual walls, load-bearing elements
-5. **Text** - Annotations, labels, room names, dimensions (text)
-6. **Symbol** - Architectural symbols (doors, windows, fixtures)
-7. **Dimension Line** - Measurement lines and dimension annotations
-8. **North Arrow** - Orientation indicator
-9. **Noise** - Background elements, decorations, irrelevant content
+- `"wall_structure"` - Individual walls, partitions, load-bearing elements, any lines forming enclosures
+- `"text"` - All text, annotations, labels, room names, dimension text, notes
+- `"symbol"` - Architectural symbols: doors, windows, stairs, fixtures, equipment
+- `"dimension_line"` - Measurement lines, dimension annotations, scale indicators
+- `"elevation"` - Elevation view indicators or labels
+- `"section"` - Section/cross-section view indicators or labels
+- `"north_arrow"` - Orientation indicator or compass rose
+- `"noise"` - Irrelevant background elements (ignore these)
+
+## Task Analysis
+
+Analyze the provided architectural drawing image (may be floor plan, elevation, section, or detail) and:
+
+1. Extract ALL walls and structural elements as `wall_structure`
+2. Extract ALL text as `text` (room names, labels, dimensions, annotations)
+3. Extract ALL architectural symbols (doors, windows, stairs, fixtures) as `symbol`
+4. Extract dimension lines and measurements as `dimension_line`
+5. Extract elevation/section/detail view labels if present
+6. Extract orientation markers (north arrow) if present
+7. Ignore noise and irrelevant background
 
 ## Output Format
 

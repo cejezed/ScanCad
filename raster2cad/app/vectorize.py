@@ -199,7 +199,7 @@ class Vectorizer:
             self._handle_symbol(feature)
         elif label in ["elevation", "section"]:
             self._handle_elevation_or_section(feature, image, msp, label)
-        elif label in ["dimension_line", "noise"]:
+        elif label in ["dimension_line", "noise", "north_arrow", "floorplan"]:
             logger.debug(f"Skipping {label}: {feature.id}")
         else:
             logger.warning(f"Unknown label: {label}")
