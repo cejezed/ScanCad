@@ -205,47 +205,42 @@ class Vectorizer:
             logger.warning(f"Unknown label: {label}")
 
     def _handle_wall_structure(self, feature: Feature, image: np.ndarray) -> None:
-        """Detect and vectorize wall structures using CV."""
+        """Vectorize wall structures from bounding box coordinates.
+
+        OpenAI detects walls as rectangular boxes. We convert these directly to
+        DXF line segments without CV line detection (which fails on thin walls).
+        """
         x1, y1, x2, y2 = [int(v) for v in feature.box]
 
         # Ensure valid box
         if x2 <= x1 or y2 <= y1:
             return
 
-        # Crop region
-        roi = image[y1:y2, x1:x2]
+        width = x2 - x1
+        height = y2 - y1
 
-        # Preprocess
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        # Blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        # Threshold
-        _, thresh = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-        # Morphological opening
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        opened = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+        # Determine if wall is horizontal or vertical based on aspect ratio
+        # Horizontal wall: width >> height
+        # Vertical wall: height >> width
+        is_horizontal = width > height * 2
+        is_vertical = height > width * 2
 
-        # Detect lines using LSD
-        try:
-            lsd = cv2.createLineSegmentDetector(0, 0.8, 0.1, 50)
-            lines, _, _, _ = lsd.detect(opened)
-        except Exception as e:
-            logger.warning(f"LSD detection failed: {e}")
+        if not (is_horizontal or is_vertical):
+            # Box is too square-ish, skip it (likely noise)
+            logger.debug(f"Skipping roughly-square wall box {feature.id}: {width}x{height}")
             return
 
-        if lines is None:
-            return
+        if is_horizontal:
+            # Horizontal wall: draw line across the middle
+            y_mid = (y1 + y2) / 2
+            segment = WallSegment(x1, y_mid, x2, y_mid)
+        else:
+            # Vertical wall: draw line down the middle
+            x_mid = (x1 + x2) / 2
+            segment = WallSegment(x_mid, y1, x_mid, y2)
 
-        # Convert to global coordinates and add to segments
-        for line in lines:
-            x_local1, y_local1, x_local2, y_local2 = line[0]
-            x_global1 = x1 + x_local1
-            y_global1 = y1 + y_local1
-            x_global2 = x1 + x_local2
-            y_global2 = y1 + y_local2
-
-            segment = WallSegment(x_global1, y_global1, x_global2, y_global2)
-            self.wall_segments.append(segment)
+        self.wall_segments.append(segment)
+        logger.debug(f"Added wall segment from box {feature.id}: ({segment.x1}, {segment.y1}) → ({segment.x2}, {segment.y2})")
 
     def _handle_text(self, feature: Feature) -> None:
         """Extract text annotations."""
