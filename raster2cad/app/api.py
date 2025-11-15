@@ -238,6 +238,22 @@ async def get_plan(
         )
 
 
+@app.get("/debug/config")
+async def debug_config() -> JSONResponse:
+    """Debug endpoint: Show loaded configuration."""
+    import os
+
+    return JSONResponse(
+        content={
+            "anthropic_key_loaded": bool(os.getenv("ANTHROPIC_API_KEY")),
+            "openai_key_loaded": bool(os.getenv("OPENAI_API_KEY")),
+            "dpi": os.getenv("DPI", "300"),
+            "log_level": os.getenv("LOG_LEVEL", "INFO"),
+            "env_file_path": str(Path(__file__).parent.parent / ".env"),
+        }
+    )
+
+
 @app.post("/debug/analyze")
 async def debug_analyze(
     file: UploadFile = File(...),
