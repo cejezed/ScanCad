@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # API server
+  raster2cad-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./examples:/app/examples:ro
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # Development environment (optional)
+  raster2cad-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    stdin_open: true
+    tty: true
+    profiles: [dev]
+
+  # Test runner (optional)
+  raster2cad-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: pytest tests/ -v --cov=app --cov-report=term-missing
+    profiles: [test]
+
+volumes:
+  data:
+    driver: local
+
+networks:
+  default:
+    name: raster2cad-net

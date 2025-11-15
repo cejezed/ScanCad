@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Architectural Plan Analysis Schema",
+  "type": "object",
+  "required": [
+    "image_source",
+    "image_dims",
+    "dpi",
+    "features"
+  ],
+  "properties": {
+    "image_source": {
+      "type": "string",
+      "description": "Path or filename of the source image"
+    },
+    "image_dims": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Image dimensions [width, height] in pixels"
+    },
+    "dpi": {
+      "type": "integer",
+      "description": "Dots per inch resolution"
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "box",
+          "conf"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique feature identifier"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "floorplan",
+              "elevation",
+              "section",
+              "text",
+              "symbol",
+              "wall_structure",
+              "dimension_line",
+              "north_arrow",
+              "noise"
+            ],
+            "description": "Feature type classification"
+          },
+          "box": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "Bounding box [x1, y1, x2, y2] in pixels"
+          },
+          "conf": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence score [0, 1]"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional feature-specific metadata",
+            "properties": {
+              "content": {
+                "type": "string",
+                "description": "Text content for text features"
+              },
+              "rotation_deg": {
+                "type": "number",
+                "description": "Rotation angle in degrees"
+              },
+              "symbol_type": {
+                "type": "string",
+                "description": "Type of symbol (door, window, etc.)"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "image_source": "floor_plan.jpg",
+  "image_dims": [1200, 900],
+  "dpi": 300,
+  "features": [
+    {
+      "id": "wall_001",
+      "label": "wall_structure",
+      "box": [100, 100, 120, 800],
+      "conf": 0.98,
+      "metadata": {}
+    },
+    {
+      "id": "wall_002",
+      "label": "wall_structure",
+      "box": [100, 100, 1100, 120],
+      "conf": 0.98,
+      "metadata": {}
+    },
+    {
+      "id": "wall_003",
+      "label": "wall_structure",
+      "box": [1080, 100, 1100, 800],
+      "conf": 0.98,
+      "metadata": {}
+    },
+    {
+      "id": "wall_004",
+      "label": "wall_structure",
+      "box": [100, 780, 1100, 800],
+      "conf": 0.98,
+      "metadata": {}
+    },
+    {
+      "id": "wall_005",
+      "label": "wall_structure",
+      "box": [600, 120, 620, 700],
+      "conf": 0.95,
+      "metadata": {}
+    },
+    {
+      "id": "door_001",
+      "label": "symbol",
+      "box": [580, 115, 620, 125],
+      "conf": 0.92,
+      "metadata": {
+        "symbol_type": "door",
+        "swing_direction": "right"
+      }
+    },
+    {
+      "id": "window_001",
+      "label": "symbol",
+      "box": [150, 95, 200, 105],
+      "conf": 0.88,
+      "metadata": {
+        "symbol_type": "window"
+      }
+    },
+    {
+      "id": "window_002",
+      "label": "symbol",
+      "box": [1050, 150, 1105, 160],
+      "conf": 0.88,
+      "metadata": {
+        "symbol_type": "window"
+      }
+    },
+    {
+      "id": "text_001",
+      "label": "text",
+      "box": [200, 250, 350, 320],
+      "conf": 0.92,
+      "metadata": {
+        "content": "LIVING ROOM",
+        "rotation_deg": 0
+      }
+    },
+    {
+      "id": "text_002",
+      "label": "text",
+      "box": [700, 250, 850, 320],
+      "conf": 0.92,
+      "metadata": {
+        "content": "BEDROOM",
+        "rotation_deg": 0
+      }
+    },
+    {
+      "id": "text_003",
+      "label": "text",
+      "box": [400, 750, 550, 800],
+      "conf": 0.90,
+      "metadata": {
+        "content": "KITCHEN",
+        "rotation_deg": 0
+      }
+    },
+    {
+      "id": "dim_001",
+      "label": "dimension_line",
+      "box": [80, 150, 80, 750],
+      "conf": 0.85,
+      "metadata": {
+        "dimension": "10.5m"
+      }
+    },
+    {
+      "id": "dim_002",
+      "label": "dimension_line",
+      "box": [150, 810, 1050, 810],
+      "conf": 0.85,
+      "metadata": {
+        "dimension": "15.0m"
+      }
+    },
+    {
+      "id": "north_001",
+      "label": "north_arrow",
+      "box": [1050, 50, 1150, 150],
+      "conf": 0.95,
+      "metadata": {
+        "orientation_deg": 0
+      }
+    }
+  ]
+}
