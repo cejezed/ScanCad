@@ -86,7 +86,7 @@ def analyze_image(
 
     # Set default model based on provider
     if not model:
-        model = "gpt-4-vision" if provider == "openai" else "claude-3-5-sonnet-20241022"
+        model = "gpt-4o" if provider == "openai" else "claude-3-5-sonnet-20241022"
 
     logger.info(f"Using {provider} ({model})")
 
