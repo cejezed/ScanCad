@@ -86,6 +86,7 @@ dmypy.json
 *.jpg
 *.png
 *.pdf
+*.zip
 input/
 output/
 temp/
