@@ -238,6 +238,48 @@ async def get_plan(
         )
 
 
+@app.post("/debug/analyze")
+async def debug_analyze(
+    file: UploadFile = File(...),
+    dpi: int = Form(default=300),
+) -> JSONResponse:
+    """
+    Debug endpoint: Analyze and return detailed feature info.
+    """
+    try:
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Empty file")
+
+        if is_pdf(file_bytes):
+            images = pdf_to_images(file_bytes, page_num=1, dpi=dpi)
+            if not images:
+                raise HTTPException(status_code=400, detail="Failed to convert PDF")
+            file_bytes, _ = images[0]
+
+        plan_dict = analyze_image(file_bytes, dpi=dpi)
+
+        # Return with feature count summary
+        features = plan_dict.get("features", [])
+        summary = {
+            "total_features": len(features),
+            "by_label": {},
+            "features": features,
+        }
+
+        for feature in features:
+            label = feature.get("label", "unknown")
+            summary["by_label"][label] = summary["by_label"].get(label, 0) + 1
+
+        return JSONResponse(content=summary)
+
+    except Exception as e:
+        logger.error(f"Debug analysis failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Debug analysis failed: {str(e)}"
+        )
+
+
 @app.get("/schema")
 async def get_schema() -> JSONResponse:
     """Return the plan schema."""
