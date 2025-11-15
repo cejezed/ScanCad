@@ -12,7 +12,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -118,7 +118,7 @@ async def vectorize(
     plan: Optional[UploadFile] = File(default=None),
     dpi: int = Form(default=300),
     api_key: Optional[str] = Form(default=None),
-) -> FileResponse:
+):
     """
     Vectorize an architectural drawing to DXF.
 
@@ -133,6 +133,8 @@ async def vectorize(
     Returns:
         DXF file
     """
+    import shutil
+
     temp_dir = tempfile.mkdtemp()
 
     try:
@@ -170,11 +172,15 @@ async def vectorize(
         logger.info(f"Vectorizing to {output_path}")
         process_plan(plan_dict, str(image_path), str(output_path), dpi=dpi)
 
-        # Return DXF file
-        return FileResponse(
-            path=output_path,
+        # Load DXF file into memory before cleanup
+        with open(output_path, "rb") as f:
+            dxf_content = f.read()
+
+        # Return DXF file as streaming response
+        return StreamingResponse(
+            iter([dxf_content]),
             media_type="application/dxf",
-            filename="output.dxf",
+            headers={"Content-Disposition": "attachment; filename=output.dxf"},
         )
 
     except HTTPException:
@@ -185,12 +191,11 @@ async def vectorize(
             status_code=500, detail=f"Vectorization failed: {str(e)}"
         )
     finally:
-        # Cleanup (optional - could keep for debugging)
-        import shutil
+        # Cleanup temp files
         try:
             shutil.rmtree(temp_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp dir: {e}")
 
 
 @app.post("/plan")
