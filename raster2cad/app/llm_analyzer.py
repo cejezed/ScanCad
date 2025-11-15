@@ -177,7 +177,7 @@ def _analyze_with_openai(
     api_key: str,
     model: str,
 ) -> Dict[str, Any]:
-    """Analyze using OpenAI API (GPT-5 or fallback)."""
+    """Analyze using OpenAI Vision model with correct multimodal schema."""
     base64_image = get_image_base64(image_bytes)
 
     # Detect image format
@@ -190,42 +190,41 @@ def _analyze_with_openai(
         "Content-Type": "application/json",
     }
 
-    payload = {
-        "model": model,
-        "max_tokens": 4096,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "Analyze this architectural drawing and return ONLY valid JSON "
-                            "matching the schema with image_source, image_dims, dpi, and features array. "
-                            "No markdown, no extra text, just JSON.\n\n"
-                            + SYSTEM_PROMPT
-                        ),
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{image_format};base64,{base64_image}",
-                            "detail": "high",
+    def make_payload(selected_model: str):
+        """Create payload with correct multimodal vision schema."""
+        return {
+            "model": selected_model,
+            "max_tokens": 4096,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": (
+                                SYSTEM_PROMPT
+                                + "\n\nAnalyze this architectural drawing and return ONLY valid JSON "
+                                "with schema: image_source, image_dims, dpi, features[]. "
+                                "No markdown, no explanation — JSON ONLY."
+                            ),
                         },
-                    },
-                ],
-            }
-        ],
-    }
+                        {
+                            "type": "input_image",
+                            "image_url": f"data:{image_format};base64,{base64_image}",
+                        },
+                    ],
+                }
+            ],
+        }
 
-    # Try with the requested model, fallback to gpt-4-turbo if it fails
+    # Try with requested model first, fallback to gpt-4o if needed
     models_to_try = [model]
     if model.startswith("gpt-5"):
-        # If GPT-5 fails (user might not have access), try GPT-4 Turbo
-        models_to_try.append("gpt-4-turbo")
+        models_to_try.append("gpt-4o")
 
     for attempt_model in models_to_try:
-        payload["model"] = attempt_model
+        payload = make_payload(attempt_model)
+
         try:
             logger.debug(f"Sending request to OpenAI with model: {attempt_model}")
             logger.debug(f"API Key (first 20 chars): {api_key[:20]}...")
@@ -236,6 +235,7 @@ def _analyze_with_openai(
                 timeout=60,
             )
             logger.debug(f"OpenAI response status: {response.status_code}")
+            logger.debug(f"OpenAI raw response (first 600 chars): {response.text[:600]}")
             response.raise_for_status()
 
             # Success! Process the response
@@ -243,11 +243,10 @@ def _analyze_with_openai(
             if "error" in result:
                 logger.error(f"OpenAI API error: {result['error']}")
                 if attempt_model == models_to_try[-1]:
-                    # Last attempt failed
-                    logger.warning("Falling back to mock analyzer")
+                    logger.warning("All OpenAI models failed, falling back to mock analyzer")
                     return mock_analyze(image_bytes, dpi)
                 else:
-                    # Try next model
+                    logger.info(f"Retrying with fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
                     continue
 
             # Extract JSON from response
@@ -262,31 +261,32 @@ def _analyze_with_openai(
                 logger.error(f"Failed to extract response from OpenAI: {e}")
                 logger.error(f"Response structure: {result}")
                 if attempt_model == models_to_try[-1]:
-                    logger.warning("Falling back to mock analyzer")
+                    logger.warning("Response parsing failed, falling back to mock analyzer")
                     return mock_analyze(image_bytes, dpi)
                 else:
+                    logger.info(f"Retrying with fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
                     continue
 
         except requests.exceptions.RequestException as e:
             logger.error(f"OpenAI API call failed with {attempt_model}: {e}")
             try:
-                error_details = response.json() if response else {}
-                logger.error(f"OpenAI error details: {error_details}")
+                if response and response.text:
+                    error_details = response.json()
+                    logger.error(f"OpenAI error details: {error_details}")
             except:
                 logger.error(f"OpenAI response text: {response.text if response else 'No response'}")
 
             if attempt_model == models_to_try[-1]:
-                # Last attempt failed, give up
                 logger.warning("All OpenAI models failed, falling back to mock analyzer")
                 return mock_analyze(image_bytes, dpi)
             else:
-                # Try next model
-                logger.info(f"Trying fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
+                logger.info(f"Retrying with fallback model: {models_to_try[models_to_try.index(attempt_model) + 1]}")
                 continue
 
     # Shouldn't reach here, but just in case
     logger.warning("No models available, falling back to mock analyzer")
     return mock_analyze(image_bytes, dpi)
+
 
 
 def _parse_json_response(
