@@ -40,16 +40,18 @@ def analyze_image(
     image_bytes: bytes,
     dpi: int = 300,
     api_key: Optional[str] = None,
-    model: str = "claude-3-5-sonnet-20241022",
+    model: Optional[str] = None,
+    provider: str = "auto",
 ) -> Dict[str, Any]:
     """
-    Analyze architectural drawing via Claude API.
+    Analyze architectural drawing via Claude or OpenAI API.
 
     Args:
         image_bytes: Raw image data (jpg/png)
         dpi: Dots per inch resolution
-        api_key: Anthropic API key (uses env var if not provided)
-        model: LLM model to use
+        api_key: API key (Anthropic or OpenAI, uses env var if not provided)
+        model: LLM model to use (auto-detects if not specified)
+        provider: "claude", "openai", or "auto" (auto-detect from env vars)
 
     Returns:
         Plan dict conforming to plan.schema.json
@@ -61,11 +63,46 @@ def analyze_image(
     if requests is None:
         raise ImportError("requests library required for LLM analysis")
 
-    api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        logger.warning("No API key provided, using mock analyzer")
-        return mock_analyze(image_bytes, dpi)
+    # Auto-detect provider and API key
+    if provider == "auto":
+        claude_key = os.getenv("ANTHROPIC_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
 
+        if api_key:
+            # Detect from api_key format
+            if api_key.startswith("sk-proj-") or api_key.startswith("sk-"):
+                provider = "openai"
+            else:
+                provider = "claude"
+        elif claude_key:
+            provider = "claude"
+            api_key = claude_key
+        elif openai_key:
+            provider = "openai"
+            api_key = openai_key
+        else:
+            logger.warning("No API key provided, using mock analyzer")
+            return mock_analyze(image_bytes, dpi)
+
+    # Set default model based on provider
+    if not model:
+        model = "gpt-4-vision" if provider == "openai" else "claude-3-5-sonnet-20241022"
+
+    logger.info(f"Using {provider} ({model})")
+
+    if provider == "openai":
+        return _analyze_with_openai(image_bytes, dpi, api_key, model)
+    else:
+        return _analyze_with_claude(image_bytes, dpi, api_key, model)
+
+
+def _analyze_with_claude(
+    image_bytes: bytes,
+    dpi: int,
+    api_key: str,
+    model: str,
+) -> Dict[str, Any]:
+    """Analyze using Claude API."""
     # Detect image format
     image_format = "image/jpeg"
     if image_bytes.startswith(b"\x89PNG"):
@@ -118,20 +155,98 @@ def analyze_image(
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        logger.error(f"API call failed: {e}")
+        logger.error(f"Claude API call failed: {e}")
         logger.warning("Falling back to mock analyzer")
         return mock_analyze(image_bytes, dpi)
 
     result = response.json()
     if "error" in result:
-        logger.error(f"API error: {result['error']}")
+        logger.error(f"Claude API error: {result['error']}")
         logger.warning("Falling back to mock analyzer")
         return mock_analyze(image_bytes, dpi)
 
     # Extract JSON from response
     response_text = result["content"][0]["text"]
+    return _parse_json_response(response_text, image_bytes, dpi)
 
-    # Try to parse JSON (handle markdown code blocks)
+
+def _analyze_with_openai(
+    image_bytes: bytes,
+    dpi: int,
+    api_key: str,
+    model: str,
+) -> Dict[str, Any]:
+    """Analyze using OpenAI GPT-4 Vision API."""
+    base64_image = get_image_base64(image_bytes)
+
+    # Detect image format
+    image_format = "image/jpeg"
+    if image_bytes.startswith(b"\x89PNG"):
+        image_format = "image/png"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": model,
+        "max_tokens": 4096,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Analyze this architectural drawing and return ONLY valid JSON "
+                            "matching the schema with image_source, image_dims, dpi, and features array. "
+                            "No markdown, no extra text, just JSON.\n\n"
+                            + SYSTEM_PROMPT
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{image_format};base64,{base64_image}",
+                            "detail": "high",
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"OpenAI API call failed: {e}")
+        logger.warning("Falling back to mock analyzer")
+        return mock_analyze(image_bytes, dpi)
+
+    result = response.json()
+    if "error" in result:
+        logger.error(f"OpenAI API error: {result['error']}")
+        logger.warning("Falling back to mock analyzer")
+        return mock_analyze(image_bytes, dpi)
+
+    # Extract JSON from response
+    response_text = result["choices"][0]["message"]["content"]
+    return _parse_json_response(response_text, image_bytes, dpi)
+
+
+def _parse_json_response(
+    response_text: str,
+    image_bytes: bytes,
+    dpi: int,
+) -> Dict[str, Any]:
+    """Parse JSON from LLM response."""
     try:
         if "```json" in response_text:
             json_start = response_text.index("```json") + 7
@@ -150,7 +265,6 @@ def analyze_image(
 
     # Validate and enrich with actual image dimensions if available
     try:
-        # Try to get actual image dimensions
         from PIL import Image
         from io import BytesIO
 
@@ -159,7 +273,6 @@ def analyze_image(
         plan_dict["dpi"] = dpi
     except Exception as e:
         logger.warning(f"Could not extract image dimensions: {e}")
-        # Use defaults if not provided
         if "image_dims" not in plan_dict:
             plan_dict["image_dims"] = [1024, 768]
 
