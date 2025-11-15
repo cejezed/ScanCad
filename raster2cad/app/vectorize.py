@@ -112,7 +112,10 @@ class Vectorizer:
         self._create_layers(dwg)
 
         # Setup blocks
-        from ..blocks.dxf_block_definitions import setup_standard_blocks
+        try:
+            from blocks.dxf_block_definitions import setup_standard_blocks
+        except ImportError:
+            from ..blocks.dxf_block_definitions import setup_standard_blocks
         setup_standard_blocks(dwg)
 
         # Process features by type
@@ -139,8 +142,9 @@ class Vectorizer:
                     "layer": "TEXTS",
                     "height": text_item.get("height", 0.5),
                     "rotation": text_item.get("rotation_deg", 0),
+                    "insert": (text_item["x"], text_item["y"]),
                 },
-            ).set_pos((text_item["x"], text_item["y"]))
+            )
 
         # Write symbols
         for symbol_item in self.detected_symbols:
@@ -157,7 +161,7 @@ class Vectorizer:
 
         return out_path
 
-    def _create_layers(self, dwg: ezdxf.DXFDocument) -> None:
+    def _create_layers(self, dwg) -> None:
         """Create standard layers in DXF."""
         msp = dwg.modelspace()
         layer_defs = {
@@ -181,7 +185,7 @@ class Vectorizer:
         self,
         feature: Feature,
         image: np.ndarray,
-        dwg: ezdxf.DXFDocument,
+        dwg,
         msp: Any,
     ) -> None:
         """Process a single feature based on its label."""
@@ -275,7 +279,10 @@ class Vectorizer:
 
         symbol_type = feature.metadata.get("symbol_type", "fixture")
 
-        from ..blocks.dxf_block_definitions import get_block_name_for_symbol
+        try:
+            from blocks.dxf_block_definitions import get_block_name_for_symbol
+        except ImportError:
+            from ..blocks.dxf_block_definitions import get_block_name_for_symbol
         block_name = get_block_name_for_symbol(symbol_type)
 
         dxf_x = px_to_dxf_units(cx, self.dpi)

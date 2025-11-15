@@ -103,7 +103,7 @@ def create_wall_hatch(block_layout: BlockLayout) -> None:
         )
 
 
-def setup_standard_blocks(dwg: ezdxf.DXFDocument) -> None:
+def setup_standard_blocks(dwg) -> None:
     """
     Set up all standard architectural blocks in a DXF document.
 
