@@ -217,7 +217,6 @@ def denoise_image(
         denoised = cv2.fastNlMeansDenoisingColored(
             img,
             h=h,
-            hForColorComponents=h,
             templateWindowSize=template_window_size,
             searchWindowSize=search_window_size,
         )
