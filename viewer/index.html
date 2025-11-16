@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raster2CAD - Interactive Viewer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏗️ Raster2CAD - Interactive Viewer</h1>
+            <p>Upload architectural drawings for LLM-powered vectorization</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Upload Section -->
+            <div class="panel upload-panel">
+                <h2>1. Upload Drawing</h2>
+                <div class="upload-area" id="uploadArea">
+                    <p>Drag and drop your image here<br>or click to select</p>
+                    <input type="file" id="fileInput" accept="image/*,.pdf" style="display: none;">
+                </div>
+                <input type="hidden" id="dpiInput" value="300">
+                <button id="analyzeBtn" class="button button-primary" disabled>Analyze with LLM</button>
+            </div>
+
+            <!-- Viewer Section -->
+            <div class="panel viewer-panel">
+                <h2>2. View Results</h2>
+                <div class="viewer-controls">
+                    <label><input type="checkbox" id="showWalls" checked> Walls</label>
+                    <label><input type="checkbox" id="showText" checked> Text Labels</label>
+                    <label><input type="checkbox" id="showSymbols" checked> Symbols</label>
+                    <label><input type="checkbox" id="showDimensions" checked> Dimensions</label>
+                    <label><input type="checkbox" id="showNoise"> Noise</label>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Features Panel -->
+            <div class="panel features-panel">
+                <h2>3. Detected Features</h2>
+                <div id="featureStats" class="feature-stats">
+                    <p>Waiting for analysis...</p>
+                </div>
+                <div id="featureList" class="feature-list"></div>
+            </div>
+
+            <!-- Export Section -->
+            <div class="panel export-panel">
+                <h2>4. Export</h2>
+                <button id="exportDxfBtn" class="button button-success" disabled>Export DXF</button>
+                <button id="exportJsonBtn" class="button button-success" disabled>Export JSON</button>
+                <button id="exportOverlayBtn" class="button button-success" disabled>Download Overlay</button>
+                <div id="exportStatus" class="status"></div>
+            </div>
+        </div>
+
+        <!-- Status/Logs -->
+        <div class="status-panel">
+            <h3>Status & Logs</h3>
+            <div id="statusLog" class="log-area"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
