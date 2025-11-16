@@ -308,16 +308,15 @@ def _analyze_with_openai(
 
 
 FEATURE_PRIORITY = {
-    "region": 0,
-    "floorplan": 1,
-    "wall_structure": 2,
-    "symbol": 3,
-    "text": 4,
-    "dimension_line": 5,
-    "north_arrow": 6,
-    "noise": 7,
-    "elevation": 8,
-    "section": 9,
+    "floorplan": 0,
+    "wall_structure": 1,
+    "symbol": 2,
+    "text": 3,
+    "dimension_line": 4,
+    "north_arrow": 5,
+    "elevation": 6,
+    "section": 7,
+    "noise": 8,
 }
 
 

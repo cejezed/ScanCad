@@ -37,11 +37,11 @@ const showNoise = document.getElementById('showNoise');
 
 // Color mapping for features
 const FEATURE_COLORS = {
+    floorplan: '#c0392b',
     wall_structure: '#3498db',
     text: '#27ae60',
     symbol: '#e74c3c',
     dimension_line: '#f39c12',
-    region: '#c0392b',
     noise: '#95a5a6',
     elevation: '#e67e22',
     section: '#9b59b6',
@@ -264,7 +264,7 @@ function deselectFeature() {
 }
 
 function renderEditForm(feature) {
-    const labels = ['region', 'floorplan', 'wall_structure', 'symbol', 'text', 'dimension_line', 'north_arrow', 'elevation', 'section'];
+    const labels = ['floorplan', 'wall_structure', 'symbol', 'text', 'dimension_line', 'north_arrow', 'elevation', 'section'];
 
     let metadataFields = '';
     if (feature.label === 'text') {

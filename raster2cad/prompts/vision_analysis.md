@@ -19,14 +19,14 @@ Therefore: **focus on coarse, semantically meaningful regions. Do NOT create one
 
 ## DETECTION STRATEGY: COARSE REGIONS
 
-### 1. **region** (highest priority)
+### 1. **floorplan** (highest priority)
 - Whole floorplan boundary (1 box around entire drawing)
 - Tiled/terrace area (1 box per distinct zone)
 - Dimension band (upper + lower, 1–2 boxes)
 - Title block or legend (if present, 1 box)
 - Scan noise/fold region (if major artifact, 1 box)
 
-**Total: 3–8 region features expected**
+**Total: 3–8 floorplan features expected**
 
 ### 2. **wall_structure** (high priority)
 - **NOT** one feature per line segment.
