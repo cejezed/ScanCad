@@ -17,6 +17,7 @@ except ImportError:
     requests = None
 
 from .plan_contract import Plan, Feature
+from .plan_cleanup import normalize_floorplan_and_walls
 
 logger = logging.getLogger(__name__)
 
@@ -393,6 +394,9 @@ def _parse_json_response(
 
     # Enforce feature cap (safety net)
     plan_dict = cap_features(plan_dict, max_features=300)
+
+    # Normalize floorplan and wall boxes based on semantic features
+    plan_dict = normalize_floorplan_and_walls(plan_dict)
 
     # Validate and enrich with actual image dimensions if available
     try:
