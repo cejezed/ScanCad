@@ -319,6 +319,221 @@ async def get_schema() -> JSONResponse:
         )
 
 
+# Advanced Analysis Endpoints
+@app.post("/overlay")
+async def create_overlay(
+    file: UploadFile = File(...),
+    plan: UploadFile = File(...),
+) -> FileResponse:
+    """
+    Create debug overlay visualization of detected features on image.
+
+    Args:
+        file: Original image file
+        plan: Plan JSON file
+
+    Returns:
+        PNG overlay image
+    """
+    import shutil
+
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # Read image and plan
+        image_bytes = await file.read()
+        plan_bytes = await plan.read()
+
+        if not image_bytes or not plan_bytes:
+            raise HTTPException(status_code=400, detail="Empty files")
+
+        # Save image
+        image_path = Path(temp_dir) / "input.jpg"
+        with open(image_path, "wb") as f:
+            f.write(image_bytes)
+
+        # Parse plan
+        plan_dict = json.loads(plan_bytes)
+
+        # Create overlay
+        from .overlay import draw_overlay_with_categories
+
+        overlay_path = Path(temp_dir) / "overlay.png"
+        success = draw_overlay_with_categories(str(image_path), plan_dict, str(overlay_path))
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to create overlay")
+
+        return FileResponse(
+            path=overlay_path,
+            media_type="image/png",
+            headers={"Content-Disposition": "attachment; filename=overlay.png"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Overlay creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Overlay failed: {str(e)}")
+    finally:
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass
+
+
+@app.post("/analyze-rooms")
+async def analyze_rooms(
+    file: UploadFile = File(...),
+    plan: UploadFile = File(...),
+    dpi: int = Form(default=300),
+) -> JSONResponse:
+    """
+    Analyze room configuration from plan.
+
+    Args:
+        file: Original image file
+        plan: Plan JSON file
+        dpi: Resolution in DPI
+
+    Returns:
+        Room analysis JSON with topology
+    """
+    import shutil
+    import cv2
+
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # Read image and plan
+        image_bytes = await file.read()
+        plan_bytes = await plan.read()
+
+        if not image_bytes or not plan_bytes:
+            raise HTTPException(status_code=400, detail="Empty files")
+
+        # Save image
+        image_path = Path(temp_dir) / "input.jpg"
+        with open(image_path, "wb") as f:
+            f.write(image_bytes)
+
+        # Parse plan
+        plan_dict = json.loads(plan_bytes)
+
+        # Extract wall segments from plan
+        wall_features = [f for f in plan_dict.get("features", []) if f.get("label") == "wall_structure"]
+        wall_segments = []
+        for feat in wall_features:
+            box = feat.get("box", [])
+            if len(box) == 4:
+                x1, y1, x2, y2 = box
+                wall_segments.append((x1, y1, x2, y2))
+
+        if not wall_segments:
+            return JSONResponse({
+                "rooms": [],
+                "statistics": {
+                    "total_rooms": 0,
+                    "message": "No wall segments found"
+                }
+            })
+
+        # Detect rooms
+        from .rooms import detect_rooms_from_segments, summarize_rooms
+        px_to_mm = (1.0 / dpi) * 25.4  # DPI-based scaling
+
+        rooms = detect_rooms_from_segments(wall_segments, px_to_mm=px_to_mm, plan=plan_dict)
+        summary = summarize_rooms(rooms)
+
+        # Build spatial graph
+        from .plan_graph import build_room_graph, analyze_connectivity
+
+        rooms_dict = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "area_m2": r.area_m2,
+                "centroid": r.centroid,
+            }
+            for r in rooms
+        ]
+
+        graph = build_room_graph(rooms_dict, plan_dict)
+        connectivity = analyze_connectivity(graph)
+
+        return JSONResponse({
+            "rooms": rooms_dict,
+            "statistics": summary,
+            "connectivity": connectivity,
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Room analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Room analysis failed: {str(e)}")
+    finally:
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass
+
+
+@app.post("/export-graph")
+async def export_graph(
+    plan: UploadFile = File(...),
+) -> JSONResponse:
+    """
+    Export spatial topology graph as JSON.
+
+    Args:
+        plan: Plan JSON file
+
+    Returns:
+        Graph structure with nodes, edges, and analysis
+    """
+    try:
+        plan_bytes = await plan.read()
+
+        if not plan_bytes:
+            raise HTTPException(status_code=400, detail="Empty plan file")
+
+        # Parse plan
+        plan_dict = json.loads(plan_bytes)
+
+        # Extract room data
+        rooms_data = []
+        text_features = [f for f in plan_dict.get("features", []) if f.get("label") == "text"]
+
+        # Simple room creation from text labels
+        for i, text_feat in enumerate(text_features):
+            rooms_data.append({
+                "id": f"room_{i:03d}",
+                "name": text_feat.get("metadata", {}).get("content"),
+                "area_m2": None,
+            })
+
+        if not rooms_data:
+            rooms_data = [{"id": "room_000", "name": "Main Space", "area_m2": None}]
+
+        # Build graph
+        from .plan_graph import build_room_graph, analyze_connectivity
+
+        graph = build_room_graph(rooms_data, plan_dict)
+        connectivity = analyze_connectivity(graph)
+
+        return JSONResponse({
+            "graph": graph.to_dict(),
+            "analysis": connectivity,
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Graph export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Graph export failed: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
 
