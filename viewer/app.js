@@ -122,7 +122,7 @@ async function analyzeImage() {
 
     try {
         const formData = new FormData();
-        formData.append('image', fileInput.files[0]);
+        formData.append('file', fileInput.files[0]);
         formData.append('dpi', 300);
 
         const response = await fetch(`${API_URL}/analyze`, {
@@ -159,8 +159,10 @@ async function exportDxf() {
         logMessage('Generating DXF...', 'info');
 
         const formData = new FormData();
-        formData.append('image', fileInput.files[0]);
-        formData.append('plan', JSON.stringify(currentPlan));
+        formData.append('file', fileInput.files[0]);
+        // Convert plan JSON to Blob for file upload
+        const planBlob = new Blob([JSON.stringify(currentPlan)], { type: 'application/json' });
+        formData.append('plan', planBlob);
 
         const response = await fetch(`${API_URL}/vectorize`, {
             method: 'POST',
