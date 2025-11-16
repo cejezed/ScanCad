@@ -602,3 +602,148 @@ def process_plan(
     """
     vectorizer = Vectorizer(dpi=dpi)
     return vectorizer.process_plan(plan, image_path, out_path)
+
+
+def vectorize_walls_from_plan(
+    image_bytes: bytes,
+    plan: Dict[str, Any],
+    out_path: str,
+    dpi: int = 300,
+    min_wall_thickness_px: float = 4.0,
+    min_wall_length_px: float = 30.0,
+) -> str:
+    """
+    Hybrid LLM+CV pipeline for walls-only vectorization.
+
+    Uses LLM-provided wall_structure bounding boxes as ROIs,
+    then runs CV-based line detection within those ROIs.
+    Outputs only detected walls to DXF in layer "WALLS".
+
+    Args:
+        image_bytes: Raw image data
+        plan: Plan dict with wall_structure/floorplan features (from LLM in walls_only mode)
+        out_path: Output DXF file path
+        dpi: Resolution in DPI
+        min_wall_thickness_px: Minimum wall thickness in pixels
+        min_wall_length_px: Minimum wall segment length in pixels
+
+    Returns:
+        Path to generated DXF file
+    """
+    from io import BytesIO
+    from PIL import Image
+
+    from .wall_filter import detect_line_segments, filter_wall_segments
+    from .noise_cleaning import prepare_for_line_detection
+
+    try:
+        # Load image
+        img = Image.open(BytesIO(image_bytes)).convert("L")
+        img_np = np.array(img)
+        h, w = img_np.shape[:2]
+
+        logger.info(f"Loading image: {w}x{h} pixels, processing for walls-only mode")
+
+        # Create DXF document
+        doc = ezdxf.new()
+        msp = doc.modelspace()
+
+        # Get wall features from plan
+        features = plan.get("features", [])
+        wall_features = [
+            f for f in features
+            if isinstance(f, dict) and f.get("label") in ("wall_structure", "floorplan")
+        ]
+
+        if not wall_features:
+            logger.warning("No wall features found in plan, creating empty DXF")
+            doc.saveas(out_path)
+            return out_path
+
+        all_wall_segments = []
+
+        # Process each wall ROI
+        for feature in wall_features:
+            box = feature.get("box")
+            if not box or len(box) != 4:
+                continue
+
+            x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+
+            # Clamp to image bounds
+            x1 = max(0, min(w - 1, x1))
+            y1 = max(0, min(h - 1, y1))
+            x2 = max(x1 + 1, min(w, x2))
+            y2 = max(y1 + 1, min(h, y2))
+
+            logger.debug(f"Processing wall ROI: [{x1}, {y1}, {x2}, {y2}]")
+
+            # Crop image to ROI
+            crop = img_np[y1:y2, x1:x2]
+
+            if crop.size == 0:
+                continue
+
+            # Preprocess crop for line detection
+            try:
+                preprocessed = prepare_for_line_detection(crop)
+            except Exception as e:
+                logger.warning(f"Preprocessing failed for ROI: {e}, using raw crop")
+                preprocessed = crop
+
+            # Detect line segments
+            segments_local = detect_line_segments(preprocessed)
+
+            if not segments_local:
+                continue
+
+            # Filter by wall characteristics
+            wall_segments_local = filter_wall_segments(
+                preprocessed,
+                segments_local,
+                min_thickness_px=min_wall_thickness_px,
+                min_length_px=min_wall_length_px,
+            )
+
+            # Convert local coordinates to global
+            for sx1, sy1, sx2, sy2 in wall_segments_local:
+                all_wall_segments.append((x1 + sx1, y1 + sy1, x1 + sx2, y1 + sy2))
+
+        logger.info(f"Detected {len(all_wall_segments)} wall segments across all ROIs")
+
+        # Post-process wall segments (snapping, merging)
+        try:
+            cleaned_segments = postprocess_segments(all_wall_segments)
+        except Exception as e:
+            logger.warning(f"Postprocessing failed: {e}, using raw segments")
+            cleaned_segments = all_wall_segments
+
+        # Add segments to DXF in "WALLS" layer
+        logger.info(f"Writing {len(cleaned_segments)} wall segments to DXF")
+
+        for x1, y1, x2, y2 in cleaned_segments:
+            # Convert pixel coordinates to DXF units (millimeters at 300 DPI)
+            dxf_x1 = px_to_dxf_units(x1, dpi)
+            dxf_y1 = px_to_dxf_units(y1, dpi)
+            dxf_x2 = px_to_dxf_units(x2, dpi)
+            dxf_y2 = px_to_dxf_units(y2, dpi)
+
+            # Add line to DXF
+            msp.add_line((dxf_x1, dxf_y1), (dxf_x2, dxf_y2), dxfattribs={"layer": "WALLS"})
+
+        # Save DXF
+        doc.saveas(out_path)
+        logger.info(f"Walls-only DXF saved to {out_path}")
+
+        return out_path
+
+    except Exception as e:
+        logger.error(f"Walls-only vectorization failed: {e}")
+        raise
+
+
+def px_to_dxf_units(pixels: float, dpi: int = 300) -> float:
+    """Convert pixels to DXF units (millimeters at given DPI)."""
+    # 1 inch = 25.4 mm, 1 inch = dpi pixels
+    mm_per_pixel = 25.4 / dpi
+    return pixels * mm_per_pixel
