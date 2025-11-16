@@ -12,10 +12,15 @@ Scan → Plan.JSON → DXF
 - 🤖 **LLM-Powered Analysis**: Uses Claude 3.5 Sonnet or GPT-4V for intelligent architectural drawing recognition
 - 🎯 **Hybrid CV Engine**: Combines computer vision (OpenCV LSD) with structural understanding for accurate vectorization
 - 🏗️ **CAD Output**: Generates production-ready DXF files with layers, blocks, and standards-compliant geometry
-- 🚀 **Multiple Interfaces**: REST API, CLI tool, and programmatic Python API
+- 🚀 **Multiple Interfaces**: REST API, CLI tool, interactive web viewer, and programmatic Python API
 - 🔌 **Mock Mode**: Full offline functionality without API keys (great for testing!)
 - 📦 **Docker Support**: Easy deployment with Docker and Docker Compose
-- ✅ **Fully Tested**: Comprehensive test suite with CI/CD
+- ✅ **Fully Tested**: Comprehensive test suite (179 tests) with CI/CD
+- ⚙️ **Advanced Preprocessing**: Automatic image cleaning, contrast enhancement, and noise removal
+- 📐 **Scale Inference**: Automatic DPI/scale detection from dimension lines
+- 🔍 **Smart Geometry Cleanup**: Point snapping, endpoint welding, colinear merging, orthogonalization
+- 🏛️ **Room Detection**: Automated room identification with area calculation and topology analysis
+- 📊 **Spatial Intelligence**: Building connectivity graphs, room clustering, pathfinding algorithms
 
 ---
 
@@ -58,6 +63,66 @@ Scan → Plan.JSON → DXF
 │ (CAD-ready vectors) │
 └─────────────────────┘
 ```
+
+---
+
+## Advanced Modules
+
+### Image Preprocessing (`noise_cleaning.py`)
+Sophisticated image preprocessing pipeline to improve line detection quality:
+- **Adaptive Thresholding**: THRESH_GAUSSIAN_C for uneven lighting handling
+- **Fold Line Removal**: Detects and reduces scan fold artifacts (yellowish scan marks)
+- **CLAHE Contrast Enhancement**: Contrast-Limited Adaptive Histogram Equalization for dark/light regions
+- **Non-Local Means Denoising**: Advanced noise reduction while preserving edges
+- **Morphological Cleanup**: Opening operations to remove small noise components
+
+### Scale Inference (`scale_inference.py`)
+Automatic pixel-to-millimeter scale detection from architectural dimensions:
+- **Multi-Format Parsing**: Handles Dutch/English dimension formats (mm, m, cm with comma/dot decimals)
+- **Median-Based Robustness**: Uses median of all detected dimensions for outlier resistance
+- **Consistency Validation**: Checks scale uniformity across plan to catch measurement errors
+- **Fallback Support**: Uses DPI-based default if no dimensions detected
+
+### Geometry Postprocessing (`geometry_postprocess.py`)
+Advanced CAD-quality segment cleaning and merging:
+- **Point Clustering**: Snaps endpoints within tolerance (defaul 5px) to eliminate gaps
+- **Colinear Segment Merging**: Fuses adjacent parallel segments to create continuous lines
+- **Orthogonalization**: Snaps nearly-horizontal/vertical segments to perfect cardinal directions
+- **Duplicate Removal**: Eliminates exact and reversed-direction duplicate segments
+- **Pipeline**: Deduplicate → Snap → Merge → Orthogonalize → Deduplicate (applied twice for robustness)
+
+### Room Detection (`rooms.py`)
+Automated room/space identification from wall geometry:
+- **Flood-Fill Algorithm**: Identifies enclosed connected regions in binary wall image
+- **Text Label Association**: Matches detected room names and areas to rooms by proximity
+- **Area Calculation**: Converts pixel areas to real-world square meters using scale
+- **Downsampling Support**: Optional processing downsampling for large drawings
+- **DXF Integration**: Creates LWPOLYLINE boundaries and HATCH fills in output
+
+### Dimension Extraction (`dimensions.py`)
+Architectural dimension reconstruction and validation:
+- **Text Parsing**: Extracts dimension values from detected text features
+- **Orientation Detection**: Classifies dimensions as horizontal, vertical, or diagonal
+- **Deviation Analysis**: Calculates actual vs. expected dimension lengths
+- **Quality Assurance**: Validates dimensions and flags suspicious outliers
+- **DXF Output**: Creates dimension entities with text labels in DXF
+
+### Spatial Topology Analysis (`plan_graph.py`)
+Building intelligence and room relationship mapping:
+- **Graph Construction**: Creates nodes (rooms) and edges (doors/openings) network
+- **Room Classification**: Categorizes rooms (wet, kitchen, living, sleeping) by name
+- **Connectivity Analysis**: Calculates connectivity metrics and identifies isolated areas
+- **Pathfinding**: BFS-based shortest path finding between rooms
+- **Clustering**: DFS-based identification of room groups and zones
+- **Bidirectional Analysis**: Understands door directionality and room transitions
+
+### Debug Visualization (`overlay.py`)
+Feature verification and QA visualization:
+- **Color-Coded Boxes**: Different colors for walls, text, symbols, dimensions, regions
+- **Label Overlay**: Shows feature IDs, confidence scores, and content
+- **Category Summary**: Panel showing feature counts by type
+- **Comparison**: Side-by-side visualization of different detection models
+- **Batch Processing**: Full pipeline or categorized overlays for comprehensive review
 
 ---
 
@@ -253,6 +318,112 @@ curl http://localhost:8000/healthz
 ```json
 {"status": "ok", "service": "raster2cad"}
 ```
+
+---
+
+### `POST /overlay` (Advanced Analysis)
+
+Create debug overlay visualization showing detected features on the original image.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/overlay \
+  -F "file=@drawing.jpg" \
+  -F "plan=@plan.json" \
+  --output overlay.png
+```
+
+**Response:** PNG image with color-coded feature boxes and labels
+
+**Features:**
+- Color-coded bounding boxes for different feature types (walls, text, symbols, dimensions)
+- Feature IDs and confidence scores
+- Summary panel showing feature counts by category
+- Useful for manual inspection and QA
+
+---
+
+### `POST /analyze-rooms` (Advanced Analysis)
+
+Analyze room configuration from wall segments and building spatial topology.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/analyze-rooms \
+  -F "file=@drawing.jpg" \
+  -F "plan=@plan.json" \
+  -F "dpi=300"
+```
+
+**Response:**
+```json
+{
+  "rooms": [
+    {
+      "id": "room_000",
+      "name": "Woonkamer",
+      "area_m2": 25.5,
+      "centroid": [100.0, 150.0]
+    }
+  ],
+  "statistics": {
+    "total_rooms": 3,
+    "named_rooms": 3,
+    "total_area_m2": 75.5
+  },
+  "connectivity": {
+    "total_connections": 2,
+    "avg_connectivity": 1.33,
+    "isolated_rooms": []
+  }
+}
+```
+
+**Features:**
+- Detects enclosed rooms using flood-fill algorithm
+- Associates room names and areas from text labels
+- Calculates room centroids and polygons
+- Analyzes spatial connectivity and adjacency
+- Identifies isolated rooms
+
+---
+
+### `POST /export-graph` (Advanced Analysis)
+
+Export spatial topology graph showing room relationships and building logic.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/export-graph \
+  -F "plan=@plan.json"
+```
+
+**Response:**
+```json
+{
+  "graph": {
+    "nodes": [
+      {"id": "room_001", "type": "room", "name": "Woonkamer", "area_m2": 25.5}
+    ],
+    "edges": [
+      {"from": "room_001", "to": "room_002", "type": "door", "bidirectional": true}
+    ]
+  },
+  "analysis": {
+    "total_rooms": 3,
+    "total_connections": 2,
+    "wet_rooms": 1,
+    "living_spaces": 1,
+    "sleeping_spaces": 1
+  }
+}
+```
+
+**Features:**
+- Builds room graph with connectivity edges
+- Classifies rooms (wet rooms, kitchens, living/sleeping spaces)
+- Uses graph algorithms for pathfinding and clustering
+- Analyzes building topology and layout logic
 
 ---
 
