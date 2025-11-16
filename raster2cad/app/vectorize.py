@@ -1,6 +1,7 @@
 """
 Hybrid CV + DXF vectorization engine.
 Processes plan JSON and image to generate DXF output.
+Integrates advanced modules for preprocessing, scaling, geometry cleanup, and analysis.
 """
 
 import logging
@@ -14,6 +15,13 @@ import numpy as np
 import cv2
 
 from .plan_contract import Plan, Feature
+from .scale_inference import infer_scale_from_plan
+from .noise_cleaning import prepare_for_line_detection
+from .geometry_postprocess import postprocess_segments
+from .rooms import detect_rooms_from_segments, rooms_to_dict
+from .dimensions import extract_dimensions, validate_dimensions, dimensions_to_dict
+from .plan_graph import build_room_graph, analyze_connectivity
+from .overlay import draw_overlay, draw_overlay_with_categories
 
 logger = logging.getLogger(__name__)
 
@@ -66,14 +74,38 @@ def px_to_dxf_units(px: float, dpi: int = 300) -> float:
 
 
 class Vectorizer:
-    """Main vectorization engine."""
+    """Main vectorization engine with advanced preprocessing and analysis."""
 
-    def __init__(self, dpi: int = 300, snap_tolerance_px: float = 5.0):
+    def __init__(
+        self,
+        dpi: int = 300,
+        snap_tolerance_px: float = 5.0,
+        enable_preprocessing: bool = True,
+        enable_scale_inference: bool = True,
+        enable_room_detection: bool = True,
+        enable_dimension_extraction: bool = True,
+        enable_overlay: bool = False,
+        overlay_path: Optional[str] = None,
+    ):
         self.dpi = dpi
         self.snap_tolerance_px = snap_tolerance_px
+        self.enable_preprocessing = enable_preprocessing
+        self.enable_scale_inference = enable_scale_inference
+        self.enable_room_detection = enable_room_detection
+        self.enable_dimension_extraction = enable_dimension_extraction
+        self.enable_overlay = enable_overlay
+        self.overlay_path = overlay_path
+
         self.wall_segments: List[WallSegment] = []
         self.detected_texts: List[Dict[str, Any]] = []
         self.detected_symbols: List[Dict[str, Any]] = []
+
+        # New module outputs
+        self.inferred_px_to_mm: Optional[float] = None
+        self.detected_rooms: List[Any] = []
+        self.detected_dimensions: List[Any] = []
+        self.plan_graph: Optional[Any] = None
+        self.connectivity_analysis: Optional[Dict[str, Any]] = None
 
     def process_plan(
         self,
@@ -104,6 +136,27 @@ class Vectorizer:
             logger.error(f"Failed to load image: {e}")
             raise
 
+        # **Phase 1: Preprocessing**
+        if self.enable_preprocessing:
+            try:
+                logger.info("Applying image preprocessing...")
+                image = prepare_for_line_detection(image)
+            except Exception as e:
+                logger.warning(f"Preprocessing failed: {e}. Continuing without preprocessing.")
+
+        # **Phase 2: Scale Inference**
+        px_to_mm = px_to_dxf_units(1.0, self.dpi)  # Default from DPI
+        if self.enable_scale_inference:
+            try:
+                logger.info("Inferring scale from dimension lines...")
+                inferred_scale = infer_scale_from_plan(plan, default_px_to_mm=px_to_mm)
+                if inferred_scale:
+                    px_to_mm = inferred_scale
+                    self.inferred_px_to_mm = inferred_scale
+                    logger.info(f"Inferred scale: {px_to_mm:.4f} mm/px")
+            except Exception as e:
+                logger.warning(f"Scale inference failed: {e}. Using default DPI-based scale.")
+
         # Create DXF document
         dwg = ezdxf.new("R2010")
         msp = dwg.modelspace()
@@ -124,6 +177,19 @@ class Vectorizer:
                 self._process_feature(feature, image, dwg, msp)
             except Exception as e:
                 logger.warning(f"Failed to process feature {feature.id}: {e}")
+
+        # **Phase 3: Advanced Geometry Postprocessing**
+        wall_segments_raw = [(s.x1, s.y1, s.x2, s.y2) for s in self.wall_segments]
+        try:
+            logger.info("Applying advanced geometry postprocessing...")
+            wall_segments_cleaned = postprocess_segments(wall_segments_raw)
+            # Reconstruct WallSegment objects
+            self.wall_segments = [
+                WallSegment(x1, y1, x2, y2) for x1, y1, x2, y2 in wall_segments_cleaned
+            ]
+            logger.info(f"Cleaned segments: {len(wall_segments_raw)} → {len(wall_segments_cleaned)}")
+        except Exception as e:
+            logger.warning(f"Geometry postprocessing failed: {e}. Using original segments.")
 
         # Post-processing
         self._merge_colinear_segments()
@@ -153,6 +219,69 @@ class Vectorizer:
                 (symbol_item["x"], symbol_item["y"]),
                 dxfattribs={"layer": "SYMBOLS"},
             )
+
+        # **Phase 4: Room Detection**
+        if self.enable_room_detection and self.wall_segments:
+            try:
+                logger.info("Detecting rooms from wall segments...")
+                wall_segments_world = [
+                    (s.x1 * px_to_mm, s.y1 * px_to_mm, s.x2 * px_to_mm, s.y2 * px_to_mm)
+                    for s in self.wall_segments
+                ]
+                self.detected_rooms = detect_rooms_from_segments(
+                    wall_segments_world, px_to_mm=1.0, plan=plan
+                )
+                if self.detected_rooms:
+                    logger.info(f"Detected {len(self.detected_rooms)} rooms")
+                    # Add rooms to DXF
+                    try:
+                        from .rooms import create_dxf_rooms
+                        create_dxf_rooms(dwg, msp, self.detected_rooms)
+                    except Exception as e:
+                        logger.warning(f"Could not add rooms to DXF: {e}")
+            except Exception as e:
+                logger.warning(f"Room detection failed: {e}")
+
+        # **Phase 5: Dimension Extraction**
+        if self.enable_dimension_extraction:
+            try:
+                logger.info("Extracting dimensions...")
+                self.detected_dimensions = extract_dimensions(plan, px_to_mm=px_to_mm)
+                if self.detected_dimensions:
+                    valid_dims, suspicious_dims = validate_dimensions(
+                        self.detected_dimensions
+                    )
+                    logger.info(f"Extracted {len(valid_dims)} valid, {len(suspicious_dims)} suspicious dimensions")
+                    # Add dimensions to DXF
+                    try:
+                        from .dimensions import create_dxf_dimensions
+                        create_dxf_dimensions(dwg, msp, valid_dims)
+                    except Exception as e:
+                        logger.warning(f"Could not add dimensions to DXF: {e}")
+            except Exception as e:
+                logger.warning(f"Dimension extraction failed: {e}")
+
+        # **Phase 6: Spatial Topology Analysis**
+        if self.enable_room_detection and self.detected_rooms:
+            try:
+                logger.info("Analyzing spatial topology...")
+                self.plan_graph = build_room_graph(
+                    rooms_to_dict(self.detected_rooms), plan
+                )
+                self.connectivity_analysis = analyze_connectivity(self.plan_graph)
+                logger.info(f"Topology: {self.connectivity_analysis.get('total_rooms', 0)} rooms, "
+                           f"{self.connectivity_analysis.get('total_connections', 0)} connections")
+            except Exception as e:
+                logger.warning(f"Topology analysis failed: {e}")
+
+        # **Phase 7: Optional Overlay Visualization**
+        if self.enable_overlay and self.overlay_path:
+            try:
+                logger.info("Creating debug overlay...")
+                draw_overlay_with_categories(image_path, plan, self.overlay_path)
+                logger.info(f"Overlay saved to {self.overlay_path}")
+            except Exception as e:
+                logger.warning(f"Overlay creation failed: {e}")
 
         # Save DXF
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
