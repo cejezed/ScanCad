@@ -43,6 +43,7 @@ def analyze_image(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     provider: str = "auto",
+    mode: str = "full",
 ) -> Dict[str, Any]:
     """
     Analyze architectural drawing via Claude or OpenAI API.
@@ -53,6 +54,7 @@ def analyze_image(
         api_key: API key (Anthropic or OpenAI, uses env var if not provided)
         model: LLM model to use (auto-detects if not specified)
         provider: "claude", "openai", or "auto" (auto-detect from env vars)
+        mode: Analysis mode - "full" for all features, "walls_only" for walls/floorplan only
 
     Returns:
         Plan dict conforming to plan.schema.json
@@ -90,12 +92,12 @@ def analyze_image(
     if not model:
         model = "gpt-4.1-mini" if provider == "openai" else "claude-3-5-sonnet-20241022"
 
-    logger.info(f"Using {provider} ({model})")
+    logger.info(f"Using {provider} ({model}) in {mode} mode")
 
     if provider == "openai":
-        return _analyze_with_openai(image_bytes, dpi, api_key, model)
+        return _analyze_with_openai(image_bytes, dpi, api_key, model, mode)
     else:
-        return _analyze_with_claude(image_bytes, dpi, api_key, model)
+        return _analyze_with_claude(image_bytes, dpi, api_key, model, mode)
 
 
 def _analyze_with_claude(
@@ -103,6 +105,7 @@ def _analyze_with_claude(
     dpi: int,
     api_key: str,
     model: str,
+    mode: str = "full",
 ) -> Dict[str, Any]:
     """Analyze using Claude API."""
     # Detect image format
@@ -169,7 +172,7 @@ def _analyze_with_claude(
 
     # Extract JSON from response
     response_text = result["content"][0]["text"]
-    return _parse_json_response(response_text, image_bytes, dpi)
+    return _parse_json_response(response_text, image_bytes, dpi, mode)
 
 
 def _analyze_with_openai(
@@ -177,6 +180,7 @@ def _analyze_with_openai(
     dpi: int,
     api_key: str,
     model: str,
+    mode: str = "full",
 ) -> Dict[str, Any]:
     """Analyze using OpenAI Vision models via Responses API with safe error handling."""
     base64_image = get_image_base64(image_bytes)
@@ -259,7 +263,7 @@ def _analyze_with_openai(
 
             logger.debug(f"OpenAI parsed text length: {len(response_text)}")
             logger.debug(f"OpenAI response preview (first 500 chars): {response_text[:500]}")
-            parsed = _parse_json_response(response_text, image_bytes, dpi)
+            parsed = _parse_json_response(response_text, image_bytes, dpi, mode)
             logger.info(
                 f"OpenAI analysis complete ({attempt_model}): "
                 f"{len(parsed.get('features', []))} features detected"
@@ -374,8 +378,9 @@ def _parse_json_response(
     response_text: str,
     image_bytes: bytes,
     dpi: int,
+    mode: str = "full",
 ) -> Dict[str, Any]:
-    """Parse JSON from LLM response."""
+    """Parse JSON from LLM response and apply mode-specific filtering."""
     try:
         if "```json" in response_text:
             json_start = response_text.index("```json") + 7
@@ -391,6 +396,16 @@ def _parse_json_response(
         logger.error(f"Failed to parse LLM response as JSON: {e}")
         logger.warning("Falling back to mock analyzer")
         return mock_analyze(image_bytes, dpi)
+
+    # Filter features based on analysis mode
+    if mode == "walls_only":
+        features = plan_dict.get("features", [])
+        filtered_features = [
+            f for f in features
+            if isinstance(f, dict) and f.get("label") in ("floorplan", "wall_structure")
+        ]
+        plan_dict["features"] = filtered_features
+        logger.info(f"walls_only mode: kept {len(filtered_features)} wall/floorplan features from {len(features)} total")
 
     # Enforce feature cap (safety net)
     plan_dict = cap_features(plan_dict, max_features=300)
