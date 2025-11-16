@@ -81,7 +81,7 @@ Include `metadata.content` and `metadata.rotation_deg`.
 
 When approaching the 250–300 feature limit:
 
-1. **KEEP**: region, wall_structure, symbol, text, dimension_line
+1. **KEEP**: floorplan, wall_structure, symbol, text, dimension_line
 2. **CUT first**: noise, north_arrow
 3. **COARSEN** (never delete): Combine multiple similar wall boxes into larger clusters.
 
@@ -97,7 +97,7 @@ When approaching the 250–300 feature limit:
   "features": [
     {
       "id": "feat_001",
-      "label": "region | wall_structure | symbol | text | dimension_line | north_arrow | noise",
+      "label": "floorplan | wall_structure | symbol | text | dimension_line | north_arrow | noise",
       "box": [x1, y1, x2, y2],
       "conf": 0.85,
       "metadata": {

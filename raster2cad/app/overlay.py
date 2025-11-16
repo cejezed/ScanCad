@@ -19,7 +19,7 @@ FEATURE_COLORS = {
     "text": (0, 255, 0),  # Green
     "symbol": (0, 0, 255),  # Red
     "dimension_line": (255, 255, 0),  # Cyan
-    "region": (200, 100, 0),  # Dark cyan
+    "floorplan": (200, 100, 0),  # Dark cyan
     "noise": (128, 128, 128),  # Gray
     "elevation": (255, 165, 0),  # Orange
     "section": (255, 0, 255),  # Magenta

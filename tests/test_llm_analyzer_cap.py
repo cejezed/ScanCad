@@ -12,7 +12,6 @@ class TestFeaturePriority:
     def test_priority_dict_complete(self):
         """Verify priority dict covers major label types."""
         expected_labels = [
-            "region",
             "floorplan",
             "wall_structure",
             "symbol",
@@ -25,7 +24,7 @@ class TestFeaturePriority:
 
     def test_priority_ordering(self):
         """Verify priority ordering (lower index = higher priority)."""
-        assert FEATURE_PRIORITY["region"] < FEATURE_PRIORITY["noise"]
+        assert FEATURE_PRIORITY["floorplan"] < FEATURE_PRIORITY["noise"]
         assert FEATURE_PRIORITY["wall_structure"] < FEATURE_PRIORITY["noise"]
         assert FEATURE_PRIORITY["text"] < FEATURE_PRIORITY["noise"]
         assert FEATURE_PRIORITY["noise"] > FEATURE_PRIORITY["symbol"]
@@ -159,17 +158,17 @@ class TestCapFeatures:
         """Test capping with mixed label priorities."""
         plan = {
             "features": [
-                # 60 noise items (priority 7) - should be cut first
+                # 60 noise items (priority 8) - should be cut first
                 *[{"id": f"noise_{i}", "label": "noise", "conf": 0.8} for i in range(60)],
-                # 50 dimension_line items (priority 5)
+                # 50 dimension_line items (priority 4)
                 *[{"id": f"dim_{i}", "label": "dimension_line", "conf": 0.8} for i in range(50)],
-                # 40 region items (priority 0) - highest, should be kept
-                *[{"id": f"reg_{i}", "label": "region", "conf": 0.9} for i in range(40)],
-                # 40 wall_structure items (priority 2)
+                # 40 floorplan items (priority 0) - highest, should be kept
+                *[{"id": f"flp_{i}", "label": "floorplan", "conf": 0.9} for i in range(40)],
+                # 40 wall_structure items (priority 1)
                 *[{"id": f"wall_{i}", "label": "wall_structure", "conf": 0.9} for i in range(40)],
-                # 20 symbol items (priority 3)
+                # 20 symbol items (priority 2)
                 *[{"id": f"sym_{i}", "label": "symbol", "conf": 0.85} for i in range(20)],
-                # 10 text items (priority 4)
+                # 10 text items (priority 3)
                 *[{"id": f"txt_{i}", "label": "text", "conf": 0.9} for i in range(10)],
             ]
         }
@@ -183,13 +182,13 @@ class TestCapFeatures:
             label = feat["label"]
             label_counts[label] = label_counts.get(label, 0) + 1
 
-        # All high-priority items should be kept (priorities 0-5)
-        assert label_counts.get("region", 0) == 40
+        # All high-priority items should be kept (priorities 0-4)
+        assert label_counts.get("floorplan", 0) == 40
         assert label_counts.get("wall_structure", 0) == 40
         assert label_counts.get("symbol", 0) == 20
         assert label_counts.get("text", 0) == 10
 
-        # dimension_line (priority 5) should be kept, noise (priority 7) should be cut
+        # dimension_line (priority 4) should be kept, noise (priority 8) should be cut
         assert label_counts.get("dimension_line", 0) == 40  # Kept 40 out of 50
         assert label_counts.get("noise", 0) == 0  # All noise cut (lowest priority)
 

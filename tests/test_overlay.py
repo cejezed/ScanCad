@@ -25,7 +25,7 @@ class TestFeatureColors:
             "text",
             "symbol",
             "dimension_line",
-            "region",
+            "floorplan",
             "noise",
         ]
 
