@@ -49,10 +49,19 @@
                 <div id="featureList" class="feature-list"></div>
             </div>
 
+            <!-- Edit Panel -->
+            <div class="panel edit-panel">
+                <h2>4. Edit Features</h2>
+                <div id="editPanelContent">
+                    <p class="edit-hint">Click on a feature to edit it</p>
+                </div>
+            </div>
+
             <!-- Export Section -->
             <div class="panel export-panel">
-                <h2>4. Export</h2>
-                <button id="exportDxfBtn" class="button button-success" disabled>Export DXF</button>
+                <h2>5. Export</h2>
+                <button id="exportDxfBtn" class="button button-success" disabled>Export DXF (from LLM)</button>
+                <button id="vectorizeWithPlanBtn" class="button button-warning" disabled>Vectorize with Edited Plan</button>
                 <button id="exportJsonBtn" class="button button-success" disabled>Export JSON</button>
                 <button id="exportOverlayBtn" class="button button-success" disabled>Download Overlay</button>
                 <div id="exportStatus" class="status"></div>

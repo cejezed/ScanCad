@@ -307,6 +307,69 @@ def _analyze_with_openai(
 
 
 
+FEATURE_PRIORITY = {
+    "region": 0,
+    "floorplan": 1,
+    "wall_structure": 2,
+    "symbol": 3,
+    "text": 4,
+    "dimension_line": 5,
+    "north_arrow": 6,
+    "noise": 7,
+    "elevation": 8,
+    "section": 9,
+}
+
+
+def cap_features(
+    plan_dict: Dict[str, Any], max_features: int = 300, log_info: bool = True
+) -> Dict[str, Any]:
+    """
+    Limit the number of features to at most `max_features`.
+
+    Keeps the most important ones based on FEATURE_PRIORITY.
+    This is a safety net for large LLM outputs that could overload the vectorizer.
+
+    Args:
+        plan_dict: Plan dictionary with "features" list
+        max_features: Maximum allowed features (default 300)
+        log_info: Whether to log the capping action
+
+    Returns:
+        Modified plan_dict with features trimmed if necessary
+    """
+    features = plan_dict.get("features", [])
+    if not isinstance(features, list):
+        return plan_dict
+
+    original_count = len(features)
+
+    if original_count <= max_features:
+        return plan_dict
+
+    def priority_key(feature: Dict[str, Any]) -> tuple:
+        """Sort by priority, then by confidence (descending)."""
+        label = feature.get("label", "noise")
+        priority_idx = FEATURE_PRIORITY.get(label, 999)
+        confidence = feature.get("conf", 0.0)
+        # Return tuple: (priority_idx, -confidence) to sort ascending by priority, descending by conf
+        return (priority_idx, -confidence)
+
+    # Sort features by priority and confidence, keep first max_features
+    sorted_features = sorted(features, key=priority_key)
+    trimmed = sorted_features[:max_features]
+
+    plan_dict["features"] = trimmed
+
+    if log_info:
+        removed_count = original_count - max_features
+        logger.info(
+            f"Capped features: {original_count} → {max_features} (removed {removed_count} lowest-priority features)"
+        )
+
+    return plan_dict
+
+
 def _parse_json_response(
     response_text: str,
     image_bytes: bytes,
@@ -328,6 +391,9 @@ def _parse_json_response(
         logger.error(f"Failed to parse LLM response as JSON: {e}")
         logger.warning("Falling back to mock analyzer")
         return mock_analyze(image_bytes, dpi)
+
+    # Enforce feature cap (safety net)
+    plan_dict = cap_features(plan_dict, max_features=300)
 
     # Validate and enrich with actual image dimensions if available
     try:

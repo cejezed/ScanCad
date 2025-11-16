@@ -534,6 +534,100 @@ async def export_graph(
         raise HTTPException(status_code=500, detail=f"Graph export failed: {str(e)}")
 
 
+# Human-in-the-loop editing endpoint
+@app.post("/vectorize-with-plan")
+async def vectorize_with_plan(
+    file: UploadFile = File(...),
+    plan_json: str = Form(...),
+    dpi: int = Form(default=300),
+):
+    """
+    Vectorize using a client-provided (edited) plan.json instead of LLM analysis.
+
+    This endpoint enables human-in-the-loop workflows:
+    1. User uploads image → /analyze → gets plan.json + viewer overlay
+    2. User edits features in viewer (add, delete, change labels)
+    3. User submits corrected plan → /vectorize-with-plan → gets DXF
+
+    Args:
+        file: Raster image (jpg, png) or PDF
+        plan_json: Edited plan.json as form string (must be valid JSON)
+        dpi: Resolution in DPI
+
+    Returns:
+        DXF file (MIME type: application/dxf)
+
+    Raises:
+        HTTPException: 400 if plan_json is invalid JSON
+        HTTPException: 500 if vectorization fails
+    """
+    import shutil
+    from .pdf_utils import is_pdf, pdf_to_images
+
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # Read image
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty image file")
+
+        # Parse provided plan
+        try:
+            plan_dict = json.loads(plan_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid JSON in plan_json: {str(e)}"
+            )
+
+        # Handle PDF
+        if is_pdf(image_bytes):
+            logger.info("PDF detected, converting first page to image")
+            images = pdf_to_images(image_bytes, page_num=1, dpi=dpi)
+            if not images:
+                raise HTTPException(status_code=400, detail="Failed to convert PDF")
+            image_bytes, _ = images[0]
+
+        # Save image temporarily
+        image_path = Path(temp_dir) / "input.jpg"
+        with open(image_path, "wb") as f:
+            f.write(image_bytes)
+
+        # Vectorize with provided plan (skip LLM analysis)
+        output_path = Path(temp_dir) / "output.dxf"
+        logger.info(f"Vectorizing with client-provided plan ({len(plan_dict.get('features', []))} features)")
+
+        from .vectorize import Vectorizer
+
+        vectorizer = Vectorizer(dpi=dpi)
+        vectorizer.process_plan(plan_dict, str(image_path), str(output_path))
+
+        # Load DXF file into memory before cleanup
+        with open(output_path, "rb") as f:
+            dxf_content = f.read()
+
+        # Return DXF file as streaming response
+        return StreamingResponse(
+            iter([dxf_content]),
+            media_type="application/dxf",
+            headers={"Content-Disposition": "attachment; filename=output.dxf"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Vectorization with plan failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Vectorization failed: {str(e)}"
+        )
+    finally:
+        # Cleanup temp files
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp dir: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
 

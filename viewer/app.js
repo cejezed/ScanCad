@@ -10,6 +10,8 @@ let currentImage = null;
 let currentPlan = null;
 let imageWidth = 0;
 let imageHeight = 0;
+let selectedFeatureId = null;
+let editedPlan = null; // Track if plan has been edited
 
 // DOM Elements
 const uploadArea = document.getElementById('uploadArea');
@@ -20,7 +22,9 @@ const ctx = canvas.getContext('2d');
 const statusLog = document.getElementById('statusLog');
 const featureStats = document.getElementById('featureStats');
 const featureList = document.getElementById('featureList');
+const editPanelContent = document.getElementById('editPanelContent');
 const exportDxfBtn = document.getElementById('exportDxfBtn');
+const vectorizeWithPlanBtn = document.getElementById('vectorizeWithPlanBtn');
 const exportJsonBtn = document.getElementById('exportJsonBtn');
 const exportOverlayBtn = document.getElementById('exportOverlayBtn');
 
@@ -57,8 +61,10 @@ uploadArea.addEventListener('drop', handleFileDrop);
 fileInput.addEventListener('change', handleFileSelect);
 analyzeBtn.addEventListener('click', analyzeImage);
 exportDxfBtn.addEventListener('click', exportDxf);
+vectorizeWithPlanBtn.addEventListener('click', vectorizeWithPlan);
 exportJsonBtn.addEventListener('click', exportJson);
 exportOverlayBtn.addEventListener('click', exportOverlay);
+canvas.addEventListener('click', handleCanvasClick);
 
 // Redraw on checkbox changes
 showWalls.addEventListener('change', () => drawOverlay());
@@ -215,6 +221,213 @@ function downloadFile(blob, filename, mimeType) {
     URL.revokeObjectURL(url);
 }
 
+// ===== Feature Editing =====
+
+function handleCanvasClick(e) {
+    if (!currentPlan) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = imageWidth / rect.width;
+    const scaleY = imageHeight / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    // Find clicked feature
+    for (const feature of currentPlan.features) {
+        const [x1, y1, x2, y2] = feature.box;
+        if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+            selectFeature(feature.id);
+            return;
+        }
+    }
+
+    // Click outside features
+    deselectFeature();
+}
+
+function selectFeature(featureId) {
+    selectedFeatureId = featureId;
+    const feature = currentPlan.features.find(f => f.id === featureId);
+    if (!feature) return;
+
+    renderEditForm(feature);
+    updateFeatureListSelection();
+    drawOverlay();
+}
+
+function deselectFeature() {
+    selectedFeatureId = null;
+    editPanelContent.innerHTML = '<p class="edit-hint">Click on a feature to edit it</p>';
+    updateFeatureListSelection();
+    drawOverlay();
+}
+
+function renderEditForm(feature) {
+    const labels = ['region', 'floorplan', 'wall_structure', 'symbol', 'text', 'dimension_line', 'north_arrow', 'elevation', 'section'];
+
+    let metadataFields = '';
+    if (feature.label === 'text') {
+        const content = feature.metadata?.content || '';
+        metadataFields = `
+            <div class="form-group">
+                <label for="contentInput">Text Content</label>
+                <textarea id="contentInput" placeholder="Enter text content">${content}</textarea>
+            </div>
+        `;
+    } else if (feature.label === 'symbol') {
+        const symbolType = feature.metadata?.symbol_type || '';
+        metadataFields = `
+            <div class="form-group">
+                <label for="symbolInput">Symbol Type</label>
+                <input type="text" id="symbolInput" placeholder="e.g., door, window, toilet" value="${symbolType}">
+            </div>
+        `;
+    }
+
+    const confidence = (feature.conf * 100).toFixed(1);
+    const [x1, y1, x2, y2] = feature.box;
+    const width = Math.round(x2 - x1);
+    const height = Math.round(y2 - y1);
+
+    const html = `
+        <div class="edit-form">
+            <div class="form-group">
+                <label>Feature ID</label>
+                <input type="text" value="${feature.id}" disabled style="background: #ecf0f1;">
+            </div>
+
+            <div class="form-group">
+                <label for="labelSelect">Label</label>
+                <select id="labelSelect">
+                    ${labels.map(l => `<option value="${l}" ${l === feature.label ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Confidence</label>
+                <input type="text" value="${confidence}%" disabled style="background: #ecf0f1;">
+            </div>
+
+            <div class="form-group">
+                <label>Bounding Box</label>
+                <input type="text" value="[${x1}, ${y1}, ${x2}, ${y2}] (${width}×${height}px)" disabled style="background: #ecf0f1;">
+            </div>
+
+            ${metadataFields}
+
+            <div class="form-actions">
+                <button class="button-edit" onclick="saveFeatureChanges()">Save</button>
+                <button class="button-delete" onclick="deleteFeature('${feature.id}')">Delete</button>
+            </div>
+        </div>
+    `;
+
+    editPanelContent.innerHTML = html;
+}
+
+function saveFeatureChanges() {
+    if (!selectedFeatureId || !currentPlan) return;
+
+    const feature = currentPlan.features.find(f => f.id === selectedFeatureId);
+    if (!feature) return;
+
+    const labelSelect = document.getElementById('labelSelect');
+    const newLabel = labelSelect.value;
+
+    // Update label
+    if (newLabel !== feature.label) {
+        feature.label = newLabel;
+        editedPlan = JSON.parse(JSON.stringify(currentPlan)); // Mark as edited
+    }
+
+    // Update metadata based on label
+    if (newLabel === 'text') {
+        const contentInput = document.getElementById('contentInput');
+        if (contentInput) {
+            if (!feature.metadata) feature.metadata = {};
+            feature.metadata.content = contentInput.value;
+            editedPlan = JSON.parse(JSON.stringify(currentPlan));
+        }
+    } else if (newLabel === 'symbol') {
+        const symbolInput = document.getElementById('symbolInput');
+        if (symbolInput) {
+            if (!feature.metadata) feature.metadata = {};
+            feature.metadata.symbol_type = symbolInput.value;
+            editedPlan = JSON.parse(JSON.stringify(currentPlan));
+        }
+    }
+
+    logMessage(`Saved changes to feature ${selectedFeatureId}`, 'success');
+    renderEditForm(feature); // Re-render to show updated state
+    updateFeatureList();
+    drawOverlay();
+    vectorizeWithPlanBtn.disabled = false;
+}
+
+function deleteFeature(featureId) {
+    if (!currentPlan) return;
+
+    const index = currentPlan.features.findIndex(f => f.id === featureId);
+    if (index === -1) return;
+
+    currentPlan.features.splice(index, 1);
+    editedPlan = JSON.parse(JSON.stringify(currentPlan)); // Mark as edited
+
+    logMessage(`Deleted feature ${featureId}`, 'success');
+    deselectFeature();
+    updateFeatureStats();
+    updateFeatureList();
+    drawOverlay();
+    vectorizeWithPlanBtn.disabled = false;
+}
+
+function updateFeatureListSelection() {
+    const items = document.querySelectorAll('.feature-item');
+    items.forEach(item => {
+        if (item.dataset.featureId === selectedFeatureId) {
+            item.classList.add('selected');
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+async function vectorizeWithPlan() {
+    if (!editedPlan || !fileInput.files[0]) {
+        logMessage('No edited plan to vectorize', 'error');
+        return;
+    }
+
+    vectorizeWithPlanBtn.disabled = true;
+    logMessage('Vectorizing with edited plan...', 'info');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('plan_json', JSON.stringify(editedPlan));
+        formData.append('dpi', 300);
+
+        const response = await fetch(`${API_URL}/vectorize-with-plan`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        downloadFile(blob, 'output_edited.dxf', 'application/dxf');
+        logMessage('DXF exported successfully from edited plan', 'success');
+
+    } catch (error) {
+        logMessage(`Vectorization failed: ${error.message}`, 'error');
+    } finally {
+        vectorizeWithPlanBtn.disabled = false;
+    }
+}
+
 // ===== Drawing =====
 
 function drawOverlay() {
@@ -256,10 +469,13 @@ function drawFeaturesOnCanvas(features, visibilityMap = null) {
         const [x1, y1, x2, y2] = feature.box;
         const color = FEATURE_COLORS[label] || '#95a5a6';
         const conf = (feature.conf * 100).toFixed(0);
+        const isSelected = feature.id === selectedFeatureId;
 
         // Draw box
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = isSelected ? '#fff000' : color;
+        ctx.lineWidth = isSelected ? 4 : 2;
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        ctx.lineWidth = 2;
 
         // Draw filled background for label
         const labelText = `${label} (${conf}%)`;
@@ -267,11 +483,11 @@ function drawFeaturesOnCanvas(features, visibilityMap = null) {
         const textWidth = textMetrics.width + 8;
         const textHeight = 20;
 
-        ctx.fillStyle = color;
+        ctx.fillStyle = isSelected ? '#fff000' : color;
         ctx.fillRect(x1, y1 - textHeight, textWidth, textHeight);
 
         // Draw text
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = isSelected ? '#000' : 'white';
         ctx.fillText(labelText, x1 + 4, y1 - 5);
 
         // Draw additional content for text features
@@ -318,12 +534,13 @@ function updateFeatureList() {
         const label = feature.label;
         const color = FEATURE_COLORS[label] || '#95a5a6';
         const conf = (feature.conf * 100).toFixed(0);
+        const isSelected = feature.id === selectedFeatureId ? 'selected' : '';
 
         let content = feature.metadata?.content || feature.metadata?.symbol_type || '';
         if (content) content = ` - "${content}"`;
 
         html += `
-            <div class="feature-item">
+            <div class="feature-item ${isSelected}" data-feature-id="${feature.id}" onclick="selectFeature('${feature.id}')">
                 <span class="feature-item-label" style="background: ${color};">${label}</span>
                 ${feature.id} (${conf}%)${content}
             </div>

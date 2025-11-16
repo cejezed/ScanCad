@@ -157,6 +157,111 @@ canvas {
     grid-row: 2;
 }
 
+/* Edit Panel */
+.edit-panel {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.edit-hint {
+    color: #7f8c8d;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.edit-form {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.9em;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: var(--font-family);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: #7f8c8d;
+    font-size: 0.85em;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.form-actions button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.button-edit {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.button-edit:hover {
+    background: #2980b9;
+}
+
+.button-delete {
+    background: var(--danger-color);
+    color: white;
+}
+
+.button-delete:hover {
+    background: #c0392b;
+}
+
+.button-add {
+    background: var(--success-color);
+    color: white;
+}
+
+.button-add:hover {
+    background: #229954;
+}
+
 .feature-stats {
     background: white;
     padding: 15px;
@@ -184,6 +289,18 @@ canvas {
     padding: 10px;
     border-bottom: 1px solid var(--light-bg);
     font-size: 0.9em;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.feature-item:hover {
+    background-color: #e8f4f8;
+}
+
+.feature-item.selected {
+    background-color: #d1e7f1;
+    border-left: 4px solid var(--secondary-color);
+    padding-left: 6px;
 }
 
 .feature-item:last-child {
@@ -249,6 +366,17 @@ canvas {
     background: #229954;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.button-warning {
+    background: var(--warning-color);
+    color: white;
+}
+
+.button-warning:hover:not(:disabled) {
+    background: #d68910;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.4);
 }
 
 .exportStatus {
