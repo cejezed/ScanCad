@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .llm_analyzer import analyze_image, mock_analyze
-from .vectorize import process_plan
+from .vectorize import process_plan, vectorize_walls_from_plan
 from .plan_contract import Plan
 from .pdf_utils import pdf_to_images, is_pdf
 
@@ -619,6 +619,79 @@ async def vectorize_with_plan(
         logger.error(f"Vectorization with plan failed: {e}")
         raise HTTPException(
             status_code=500, detail=f"Vectorization failed: {str(e)}"
+        )
+    finally:
+        # Cleanup temp files
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp dir: {e}")
+
+
+@app.post("/vectorize-walls")
+async def vectorize_walls(
+    file: UploadFile = File(...),
+    dpi: int = Form(default=300),
+    api_key: Optional[str] = Form(default=None),
+):
+    """
+    Vectorize architectural drawing for walls only (hybrid LLM+CV mode).
+
+    Uses LLM to identify wall region boundaries (coarse ROIs),
+    then runs CV-based line detection within those ROIs to extract wall geometry.
+
+    Args:
+        file: Image file (jpg, png) or PDF
+        dpi: Resolution in DPI
+        api_key: Optional Anthropic API key
+
+    Returns:
+        DXF file containing only detected walls in layer "WALLS"
+    """
+    import shutil
+
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # Read image
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty image file")
+
+        # Handle PDF
+        if is_pdf(image_bytes):
+            logger.info("PDF detected, converting first page to image")
+            images = pdf_to_images(image_bytes, page_num=1, dpi=dpi)
+            if not images:
+                raise HTTPException(status_code=400, detail="Failed to convert PDF")
+            image_bytes, _ = images[0]
+
+        # Analyze in walls_only mode to get wall ROIs
+        logger.info("Analyzing image in walls_only mode to identify wall regions")
+        plan_dict = analyze_image(image_bytes, dpi=dpi, api_key=api_key, mode="walls_only")
+
+        # Vectorize walls
+        output_path = Path(temp_dir) / "walls.dxf"
+        logger.info(f"Vectorizing walls to {output_path}")
+        vectorize_walls_from_plan(image_bytes, plan_dict, str(output_path), dpi=dpi)
+
+        # Load DXF file into memory before cleanup
+        with open(output_path, "rb") as f:
+            dxf_content = f.read()
+
+        # Return DXF file as streaming response
+        return StreamingResponse(
+            iter([dxf_content]),
+            media_type="application/dxf",
+            headers={"Content-Disposition": "attachment; filename=walls.dxf"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Walls vectorization failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Walls vectorization failed: {str(e)}"
         )
     finally:
         # Cleanup temp files
