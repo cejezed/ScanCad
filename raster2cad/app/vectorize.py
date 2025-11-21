@@ -18,7 +18,6 @@ from .plan_contract import Plan, Feature
 from .scale_inference import infer_scale_from_plan
 from .noise_cleaning import prepare_for_line_detection
 from .geometry_postprocess import postprocess_segments
-from .image_processing import preprocess_for_line_detection, detect_lines
 from .rooms import detect_rooms_from_segments, rooms_to_dict
 from .dimensions import extract_dimensions, validate_dimensions, dimensions_to_dict
 from .plan_graph import build_room_graph, analyze_connectivity
@@ -335,40 +334,42 @@ class Vectorizer:
             logger.warning(f"Unknown label: {label}")
 
     def _handle_wall_structure(self, feature: Feature, image: np.ndarray) -> None:
-        """
-        Vectorize wall structures using CV line detection within the bounding box provided by the LLM.
+        """Vectorize wall structures from bounding box coordinates.
+
+        OpenAI detects walls as rectangular boxes. We convert these directly to
+        DXF line segments without CV line detection (which fails on thin walls).
         """
         x1, y1, x2, y2 = [int(v) for v in feature.box]
 
-        # Ensure the box has a valid, positive area
+        # Ensure valid box
         if x2 <= x1 or y2 <= y1:
             return
 
-        # Crop the image to the Region of Interest (ROI)
-        roi = image[y1:y2, x1:x2]
+        width = x2 - x1
+        height = y2 - y1
 
-        # Preprocess the ROI for line detection
-        preprocessed_roi = preprocess_for_line_detection(roi)
+        # Determine if wall is horizontal or vertical based on aspect ratio
+        # Horizontal wall: width >> height
+        # Vertical wall: height >> width
+        is_horizontal = width > height * 2
+        is_vertical = height > width * 2
 
-        # Detect lines within the preprocessed ROI
-        detected_lines_local = detect_lines(preprocessed_roi)
-
-        if not detected_lines_local:
-            logger.debug(f"No lines detected in wall box {feature.id}")
+        if not (is_horizontal or is_vertical):
+            # Box is too square-ish, skip it (likely noise)
+            logger.debug(f"Skipping roughly-square wall box {feature.id}: {width}x{height}")
             return
 
-        # Convert local line coordinates (within the ROI) to global image coordinates
-        for line in detected_lines_local:
-            lx1, ly1, lx2, ly2 = line
-            global_x1 = x1 + lx1
-            global_y1 = y1 + ly1
-            global_x2 = x1 + lx2
-            global_y2 = y1 + ly2
+        if is_horizontal:
+            # Horizontal wall: draw line across the middle
+            y_mid = (y1 + y2) / 2
+            segment = WallSegment(x1, y_mid, x2, y_mid)
+        else:
+            # Vertical wall: draw line down the middle
+            x_mid = (x1 + x2) / 2
+            segment = WallSegment(x_mid, y1, x_mid, y2)
 
-            segment = WallSegment(global_x1, global_y1, global_x2, global_y2)
-            self.wall_segments.append(segment)
-
-        logger.info(f"Detected {len(detected_lines_local)} line segments in wall box {feature.id}")
+        self.wall_segments.append(segment)
+        logger.debug(f"Added wall segment from box {feature.id}: ({segment.x1}, {segment.y1}) → ({segment.x2}, {segment.y2})")
 
     def _handle_text(self, feature: Feature) -> None:
         """Extract text annotations."""
